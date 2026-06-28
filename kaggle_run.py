@@ -49,13 +49,13 @@ def _run(cmd: list[str]) -> subprocess.CompletedProcess:
 
 def _have_cli() -> bool:
     try:
-        return _run(["kaggle", "--version"]).returncode == 0
+        return _run([sys.executable, "-m", "kaggle","--version"]).returncode == 0
     except FileNotFoundError:
         return False
 
 
 def status(kid: str) -> str:
-    r = _run(["kaggle", "kernels", "status", kid])
+    r = _run([sys.executable, "-m", "kaggle","kernels", "status", kid])
     return (r.stdout or r.stderr).strip()
 
 
@@ -94,7 +94,7 @@ def main() -> None:
         print(status(kid))
         return
 
-    r = _run(["kaggle", "kernels", "push", "-p", str(HERE)])
+    r = _run([sys.executable, "-m", "kaggle","kernels", "push", "-p", str(HERE)])
     print(r.stdout or r.stderr)
     if r.returncode != 0:
         sys.exit("push failed (see output above).")

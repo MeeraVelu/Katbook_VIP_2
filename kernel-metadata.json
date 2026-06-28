@@ -1,5 +1,5 @@
 {
-  "id": "meeravelu/kaggle-latest",
+  "id": "meeravelu/katbook-vip-runner",
   "title": "Katbook VIP Runner",
   "code_file": "katbook_vip_kaggle.ipynb",
   "language": "python",
@@ -8,7 +8,9 @@
   "enable_gpu": "true",
   "enable_tpu": "false",
   "enable_internet": "true",
-  "dataset_sources": ["meeravelu/kaggle-video"],
+  "dataset_sources": [
+    "meeravelu/kaggle-video"
+  ],
   "competition_sources": [],
   "kernel_sources": [],
   "model_sources": []

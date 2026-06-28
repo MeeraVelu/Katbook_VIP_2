@@ -1,0 +1,12 @@
+# local DB credentials — never commit
+db_url.txt
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# generated artifacts (pulled from Postgres on demand)
+results/
+payload.json

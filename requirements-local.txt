@@ -1,0 +1,4 @@
+# Laptop-only tools (no GPU/ML). For pulling results and querying the database locally.
+#   pip install -r requirements-local.txt
+SQLAlchemy>=2.0
+psycopg2-binary

@@ -28,7 +28,9 @@ BASE = {
     #   "all"                 -> every discovered video
     #   "first"               -> only the first
     #   3                     -> ONLY video #3 from the printed list (unambiguous)
+    #   "2,4"  or  [2, 4]     -> SEVERAL at once (videos #2 and #4)
     #   "pendulum"            -> every filename CONTAINING this text
+    #   "chemistry,pendulum"  -> union of multiple name matches
     #   "exact name.mp4"      -> only the file whose name equals this exactly
     "PROCESS": os.environ.get("KVIP_PROCESS", "all"),
 

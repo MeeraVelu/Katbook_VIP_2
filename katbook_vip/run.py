@@ -27,8 +27,23 @@ def discover_videos(cfg: dict) -> list[str]:
 
 def select_videos(cfg: dict, all_videos: list[str]) -> list[str]:
     """Resolve CONFIG['PROCESS'] to a concrete list. No silent fallback: an
-    unmatched selection processes NOTHING and says so (never the wrong video)."""
+    unmatched selection processes NOTHING and says so (never the wrong video).
+
+    Accepts: "all" | "first" | N | "name-substring" | a LIST [2, 4] or a
+    comma-separated string "2,4" / "pendulum,chemistry" to pick several at once."""
     raw = cfg.get("PROCESS", "all")
+
+    # MULTI-SELECT: a list, or a comma-separated string -> resolve each item, dedupe.
+    if isinstance(raw, (list, tuple)) or (isinstance(raw, str) and "," in raw):
+        items = (list(raw) if isinstance(raw, (list, tuple))
+                 else [x.strip() for x in raw.split(",") if x.strip()])
+        chosen, seen = [], set()
+        for it in items:
+            for v in select_videos({**cfg, "PROCESS": it}, all_videos):
+                if v not in seen:
+                    seen.add(v); chosen.append(v)
+        return chosen
+
     if isinstance(raw, int) or (isinstance(raw, str) and raw.strip().isdigit()):
         k = int(raw)
         chosen = all_videos[k - 1:k] if 1 <= k <= len(all_videos) else []

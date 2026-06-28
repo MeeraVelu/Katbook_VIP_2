@@ -102,7 +102,7 @@ PROFILES = {
         "YOLO_MODEL": "yolov8n.pt",
         "BLIP2_MODEL": "Salesforce/blip2-opt-2.7b",
         "LLM_MODEL": "Qwen/Qwen2.5-7B-Instruct",
-        "EMBED_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
+        "EMBED_MODEL": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
         # frame budgets: voiced needs few (transcript leads); silent needs more
         "MAX_FRAMES_VOICE": 12,
         "MAX_FRAMES_SILENT": 24,
@@ -116,7 +116,7 @@ PROFILES = {
         "YOLO_MODEL": "yolov8s.pt",
         "BLIP2_MODEL": "Salesforce/blip2-opt-2.7b",
         "LLM_MODEL": "Qwen/Qwen2.5-7B-Instruct",
-        "EMBED_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
+        "EMBED_MODEL": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
         "MAX_FRAMES_VOICE": 18,
         "MAX_FRAMES_SILENT": 32,
         "CAPTION_FRAMES": 10,
@@ -129,7 +129,7 @@ PROFILES = {
         "YOLO_MODEL": "yolov8m.pt",
         "BLIP2_MODEL": "Salesforce/blip2-opt-2.7b",
         "LLM_MODEL": "Qwen/Qwen2.5-7B-Instruct",
-        "EMBED_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
+        "EMBED_MODEL": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
         "MAX_FRAMES_VOICE": 30,
         "MAX_FRAMES_SILENT": 48,
         "CAPTION_FRAMES": 16,
@@ -147,17 +147,21 @@ SCENE_LABELS = [
     "student discussion", "diagram explanation", "demonstration with equipment",
     "animated visualization", "text-heavy slide", "person talking to camera",
     "handwritten notes", "3d rendered animation", "cartoon for children",
+    "letter or word flashcard", "cooking or kitchen demonstration",
+    "live-action people indoors", "nature or animal illustration",
 ]
 # Scenes where real objects exist -> YOLO is meaningful. Everything else
-# (animation, diagrams, slides) -> suppress YOLO (saves time, kills hallucinations).
+# (animation, diagrams, slides, flashcards) -> suppress YOLO (saves time, kills
+# hallucinations).
 REALWORLD_SCENES = {
     "laboratory experiment", "demonstration with equipment",
     "person talking to camera", "teacher at a whiteboard", "student discussion",
+    "cooking or kitchen demonstration", "live-action people indoors",
 }
 # Scenes likely to carry on-screen text -> run OCR; skip OCR elsewhere.
 TEXTY_SCENES = {
     "slide presentation", "text-heavy slide", "handwritten notes",
-    "diagram explanation",
+    "diagram explanation", "letter or word flashcard",
 }
 
 

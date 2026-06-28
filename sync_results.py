@@ -185,7 +185,7 @@ def build_results(engine) -> list[dict]:
                     "summary": llm.get("summary"),
                     "confidence": llm.get("confidence"),
                     "dominant_scene": (scenes[0] if scenes else None),
-                    "objects_detected": objects,
+                    "objects_detected": objects if v["tagging_path"] == "silent" else [],
                 })
             out.append({
                 "video_id": str(v["video_id"])[:8],

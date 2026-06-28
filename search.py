@@ -41,7 +41,7 @@ def embed(query: str):
     """Normalized embedding for semantic search, or None if deps are missing."""
     try:
         from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cpu")
+        model = SentenceTransformer("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", device="cpu")
         return model.encode([query], normalize_embeddings=True)[0].tolist()
     except Exception:
         return None

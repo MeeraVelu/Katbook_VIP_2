@@ -41,7 +41,9 @@ _DOMAIN = (
     "Write topic, subject, summary, subtopics and tags in ENGLISH (never raw transcript "
     "fragments). 'language' = the spoken (or on-screen) language. Pick the grade that "
     "fits the content (an alphabet / rhyme / simple animation for young children is "
-    "Kindergarten or Grade 1-2).")
+    "Kindergarten or Grade 1-2). The 'topic' must be the SPECIFIC lesson focus "
+    "(e.g. 'Balancing Chemical Equations', 'Tamil vowel letters'), never just the "
+    "bare subject name like 'Chemistry' or 'Languages'.")
 
 
 def _voice_prompt(seg: dict, language: str) -> str:

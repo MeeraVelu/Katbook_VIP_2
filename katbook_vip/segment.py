@@ -78,6 +78,36 @@ def _cap_segments(segs: list[dict], max_segments: int) -> list[dict]:
     return segs
 
 
+def _ensure_full_coverage(segs: list[dict], duration: float,
+                          max_sec: float = 0, min_sec: float = 0) -> list[dict]:
+    """Guarantee segments span the full [0, duration]. The voiced path builds
+    segments from transcript windows, so if speech (or Whisper) stops before the
+    video ends, the tail would be dropped entirely. Extend the last segment to the
+    true duration; if that tail makes it much longer than max_sec, slice the tail
+    into max_sec-sized pieces so it stays navigable. Self-contained (no external
+    deps) so it works regardless of other segmentation helpers present."""
+    if not segs or not duration:
+        return segs
+    last = dict(segs[-1])
+    if last["end"] >= float(duration) - 1.0:   # already covers the video
+        return segs
+    out = [dict(s) for s in segs[:-1]]
+    start, end = last["start"], round(float(duration), 2)
+    span = end - start
+    if max_sec and span > max_sec:
+        n = max(1, int(round(span / max_sec)))
+        if min_sec:
+            n = min(n, max(1, int(span // max(min_sec, 1))))
+        step = span / n
+        for k in range(n):
+            a = start + k * step
+            b = end if k == n - 1 else start + (k + 1) * step
+            out.append({"start": round(a, 2), "end": round(b, 2)})
+    else:
+        out.append({"start": round(start, 2), "end": end})
+    return out
+
+
 def segment_voiced(windows: list[dict], win_emb: np.ndarray, duration: float,
                    cfg: dict) -> list[dict]:
     if len(windows) <= 1:
@@ -101,7 +131,9 @@ def segment_voiced(windows: list[dict], win_emb: np.ndarray, duration: float,
     segs = _merge_min_duration(segs, cfg["MIN_SEGMENT_SEC"])
     segs = _split_max_duration(segs, cfg.get("MAX_SEGMENT_SEC", 0),
                                cfg["MIN_SEGMENT_SEC"])
-    return _cap_segments(segs, cfg["MAX_SEGMENTS"])
+    segs = _cap_segments(segs, cfg["MAX_SEGMENTS"])
+    return _ensure_full_coverage(segs, duration, cfg.get("MAX_SEGMENT_SEC", 0),
+                                 cfg["MIN_SEGMENT_SEC"])
 
 
 def segment_silent(frames: list[dict], duration: float, cfg: dict) -> list[dict]:
@@ -117,7 +149,9 @@ def segment_silent(frames: list[dict], duration: float, cfg: dict) -> list[dict]
     segs = _merge_min_duration(segs, cfg["MIN_SEGMENT_SEC"])
     segs = _split_max_duration(segs, cfg.get("MAX_SEGMENT_SEC", 0),
                                cfg["MIN_SEGMENT_SEC"])
-    return _cap_segments(segs, cfg["MAX_SEGMENTS"])
+    segs = _cap_segments(segs, cfg["MAX_SEGMENTS"])
+    return _ensure_full_coverage(segs, duration, cfg.get("MAX_SEGMENT_SEC", 0),
+                                 cfg["MIN_SEGMENT_SEC"])
 
 
 def attach_signals(segs: list[dict], transcript: list[dict],

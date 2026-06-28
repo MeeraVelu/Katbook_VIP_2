@@ -85,8 +85,9 @@ def build_result(payload: dict) -> dict:
         "summary": (s.get("llm") or {}).get("summary"),
         "confidence": (s.get("llm") or {}).get("confidence"),
         "dominant_scene": _dominant_scene(s, frames),
-        # objects are already suppressed upstream for synthetic scenes
-        "objects_detected": s.get("objects", []),
+        # objects are evidence only on the silent path; on the voice path they are
+        # unused and noisy, so don't surface them.
+        "objects_detected": s.get("objects", []) if payload.get("tagging_path") == "silent" else [],
     } for i, s in enumerate(payload["segments"], start=1)]
     return {
         "video_id": payload["video_id"][:8],

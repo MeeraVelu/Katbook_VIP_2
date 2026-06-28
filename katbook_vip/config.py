@@ -63,6 +63,12 @@ BASE = {
     # SEGMENTATION ------------------------------------------------------- #
     "WINDOW_SEC": 30,         # transcript window for embeddings
     "MIN_SEGMENT_SEC": 45,    # do not emit segments shorter than this
+    # Hard ceiling on a single segment's length. Semantic boundary detection can
+    # under-segment a smooth lecture into one giant block; any segment longer
+    # than this is force-split into equal sub-segments so search/navigation stays
+    # granular. Lower = finer segments but MORE LLM calls (slower). 90-120 is a
+    # good balance for a free T4; drop to 90 for finer topic indexing.
+    "MAX_SEGMENT_SEC": float(os.environ.get("KVIP_MAX_SEGMENT_SEC", "120")),
     "MAX_SEGMENTS": 12,       # hard cap on segments/video (caps LLM calls)
     "SIM_DROP_FALLBACK": 0.25,
 
@@ -71,8 +77,11 @@ BASE = {
     "DATABASE_URL": os.environ.get("DATABASE_URL"),
     "ENABLE_DB": os.environ.get("KVIP_ENABLE_DB", "1") != "0",
 
-    # Per-segment LLM output budget (enough to finish strict JSON).
-    "LLM_MAX_NEW_TOKENS": int(os.environ.get("KVIP_LLM_TOKENS", "420")),
+    # Per-segment LLM output budget. The schema has ~13 keys incl. subtopics +
+    # a sentence summary; 420 truncated mid-JSON on richer segments (dropping
+    # subtopics/confidence and forcing the regex recovery path). 512 leaves
+    # headroom so strict json.loads succeeds.
+    "LLM_MAX_NEW_TOKENS": int(os.environ.get("KVIP_LLM_TOKENS", "512")),
 }
 
 

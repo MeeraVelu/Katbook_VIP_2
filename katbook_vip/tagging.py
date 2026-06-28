@@ -82,18 +82,67 @@ def _parse_llm(raw: str) -> dict:
             return json.loads(cand)
         except Exception:
             pass
-    # field-by-field regex fallback for truncated output
-    def grab(k):
+
+    # ---- field-by-field regex fallback for TRUNCATED output ----
+    # Recover every field the truncated JSON completed, including the list and
+    # numeric fields the old fallback dropped (subtopics, confidence) — those
+    # were the keys that came back empty/None whenever a segment hit this path.
+    def grab_str(k):
         mm = re.search(rf'"{k}"\s*:\s*"([^"]*)"', js)
         return mm.group(1) if mm else None
-    tg = re.search(r'"tags"\s*:\s*\[(.*?)\]', js, re.DOTALL)
-    out = {"topic": grab("topic"), "subject": grab("subject"),
-           "grade_level": grab("grade_level"), "difficulty": grab("difficulty"),
-           "content_type": grab("content_type"), "summary": grab("summary"),
-           "tags": [x.strip().strip('"') for x in tg.group(1).split(",") if x.strip()]
-           if tg else []}
-    out = {k: v for k, v in out.items() if v}
-    return out or {"_parse_error": raw[:300]}
+
+    def grab_list(k):
+        mm = re.search(rf'"{k}"\s*:\s*\[(.*?)\]', js, re.DOTALL)
+        if not mm:
+            return None
+        return [x.strip().strip('"') for x in mm.group(1).split(",") if x.strip().strip('"')]
+
+    def grab_num(k):
+        mm = re.search(rf'"{k}"\s*:\s*([0-9]*\.?[0-9]+)', js)
+        return float(mm.group(1)) if mm else None
+
+    def grab_bool(k):
+        mm = re.search(rf'"{k}"\s*:\s*(true|false)', js)
+        return (mm.group(1) == "true") if mm else None
+
+    out = {
+        "topic": grab_str("topic"), "subject": grab_str("subject"),
+        "grade_level": grab_str("grade_level"), "difficulty": grab_str("difficulty"),
+        "content_type": grab_str("content_type"), "summary": grab_str("summary"),
+        "speaker_role": grab_str("speaker_role"), "language": grab_str("language"),
+        "tags": grab_list("tags"), "subtopics": grab_list("subtopics"),
+        "confidence": grab_num("confidence"),
+        "has_visual_content": grab_bool("has_visual_content"),
+        "_recovered": True,  # flag: this came from truncation recovery, not strict parse
+    }
+    out = {k: v for k, v in out.items() if v is not None}
+    # if literally nothing recovered (not even a topic), surface the raw error
+    return out if out.get("topic") or out.get("summary") else {"_parse_error": raw[:300]}
+
+
+def _finalize_fields(d: dict, is_silent: bool) -> dict:
+    """Guarantee the keys downstream code (and the JSON) expect always exist with
+    sensible defaults, so a parse/recovery never yields null confidence or a
+    missing subtopics list. Defaults are conservative; recovery is flagged."""
+    if "_parse_error" in d:
+        return d
+    d.setdefault("subtopics", [])
+    d.setdefault("tags", [])
+    # confidence: never leave it null. If the model omitted it (common on the
+    # recovery path), default by route — silent inference is inherently less sure.
+    if d.get("confidence") is None:
+        d["confidence"] = 0.5 if is_silent else 0.7
+        d["confidence_defaulted"] = True
+    else:
+        try:
+            d["confidence"] = round(float(d["confidence"]), 2)
+        except Exception:
+            d["confidence"] = 0.5 if is_silent else 0.7
+            d["confidence_defaulted"] = True
+    # silent path must never claim high confidence
+    if is_silent and d["confidence"] > 0.6:
+        d["confidence"] = 0.6
+    return d
 
 
 def _dominant_value(segments: list[dict], field: str):
@@ -163,9 +212,11 @@ def tag_segments(payload: dict, route_path: str, cfg: dict, device: str) -> None
                                    max_new_tokens=cfg["LLM_MAX_NEW_TOKENS"],
                                    do_sample=False, pad_token_id=tok.eos_token_id)
             raw = tok.decode(out[0][inp.input_ids.shape[1]:], skip_special_tokens=True)
-            seg["llm"] = _parse_llm(raw)
+            seg["llm"] = _finalize_fields(_parse_llm(raw), is_silent)
             log(f"seg {i}: topic={seg['llm'].get('topic')!r} "
-                f"subject={seg['llm'].get('subject')!r}")
+                f"subject={seg['llm'].get('subject')!r} "
+                f"conf={seg['llm'].get('confidence')}"
+                f"{' [recovered]' if seg['llm'].get('_recovered') else ''}")
 
     _consistency_pass(payload["segments"])
 

@@ -45,7 +45,7 @@ def _ensure_schema(cx, dim: int) -> None:
         CREATE TABLE IF NOT EXISTS videos (
             video_id UUID PRIMARY KEY, source_path TEXT, duration FLOAT,
             language TEXT, has_speech BOOLEAN, tagging_path TEXT,
-            audio_features JSONB, nlp JSONB, stage_timings JSONB,
+            audio_features JSONB, nlp JSONB, stage_timings JSONB, runtime JSONB,
             created_at TIMESTAMPTZ DEFAULT now())"""))
     cx.execute(sql(f"""
         CREATE TABLE IF NOT EXISTS segments (
@@ -59,7 +59,8 @@ def _ensure_schema(cx, dim: int) -> None:
                  coalesce(ocr,''))) STORED)"""))
     cx.execute(sql("CREATE INDEX IF NOT EXISTS seg_fts_idx ON segments USING GIN(fts)"))
     # idempotent column adds for DBs created by an earlier schema version
-    for col, typ in (("has_speech", "BOOLEAN"), ("tagging_path", "TEXT")):
+    for col, typ in (("has_speech", "BOOLEAN"), ("tagging_path", "TEXT"),
+                     ("runtime", "JSONB")):
         cx.execute(sql(f"ALTER TABLE videos ADD COLUMN IF NOT EXISTS {col} {typ}"))
 
 
@@ -70,17 +71,18 @@ def store(payload: dict, seg_emb, engine) -> None:
         _ensure_schema(cx, dim)
         cx.execute(sql("""
             INSERT INTO videos(video_id, source_path, duration, language,
-                has_speech, tagging_path, audio_features, nlp, stage_timings)
-            VALUES (:vid,:sp,:dur,:lang,:hs,:tp,:af,:nlp,:st)
+                has_speech, tagging_path, audio_features, nlp, stage_timings, runtime)
+            VALUES (:vid,:sp,:dur,:lang,:hs,:tp,:af,:nlp,:st,:rt)
             ON CONFLICT (video_id) DO UPDATE SET
                 duration=:dur, language=:lang, has_speech=:hs, tagging_path=:tp,
-                audio_features=:af, nlp=:nlp, stage_timings=:st"""),
+                audio_features=:af, nlp=:nlp, stage_timings=:st, runtime=:rt"""),
             {"vid": payload["video_id"], "sp": payload["source_path"],
              "dur": float(payload.get("duration") or 0), "lang": payload.get("language"),
              "hs": payload.get("has_speech"), "tp": payload.get("tagging_path"),
              "af": json.dumps(payload.get("audio_features", {})),
              "nlp": json.dumps(payload.get("nlp", {})),
-             "st": json.dumps(payload.get("stage_timings", {}))})
+             "st": json.dumps(payload.get("stage_timings", {})),
+             "rt": json.dumps(payload.get("runtime", {}))})
         cx.execute(sql("DELETE FROM segments WHERE video_id=:v"),
                    {"v": payload["video_id"]})
         for i, s in enumerate(payload["segments"]):

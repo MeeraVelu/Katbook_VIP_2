@@ -31,67 +31,83 @@ def _dominant_scene(seg: dict, frames: list[dict]) -> str | None:
     return (seg.get("scenes") or [None])[0]
 
 
-def video_rollup(segments: list[dict]) -> dict:
-    """One classification for the WHOLE video — what you index/dedupe the library on.
-    subject/grade/difficulty are already unified by the consistency pass; topics and
-    tags are aggregated across segments (unique, order-preserving)."""
-    def _vals(field):
-        return [(s.get("llm") or {}).get(field) for s in segments
-                if (s.get("llm") or {}).get(field)]
-    def _mode(xs):
-        return Counter(xs).most_common(1)[0][0] if xs else None
-    topics, tags = [], []
-    for s in segments:
-        llm = s.get("llm") or {}
-        if llm.get("topic") and llm["topic"] not in topics:
-            topics.append(llm["topic"])
-        for t in llm.get("tags", []):
-            if t not in tags:
-                tags.append(t)
+_DIFF_RANK = {"beginner": 0, "intermediate": 1, "advanced": 2, "expert": 3}
+
+
+def video_rollup(seg_rows: list[dict]) -> dict:
+    """Video-level summary aggregated from the per-segment tags: the majority
+    subject/grade, the hardest difficulty seen, the primary (longest-segment)
+    topic, the ordered list of topics, and the de-duplicated union of all tags.
+
+    Shared shape so the Kaggle-written JSON and the laptop-synced JSON match
+    exactly. `seg_rows` are the already-flattened segment dicts.
+    """
+    subjects = [s["subject"] for s in seg_rows if s.get("subject")]
+    grades = [s["grade"] for s in seg_rows if s.get("grade")]
+    diffs = [s["difficulty"] for s in seg_rows if s.get("difficulty")]
+    primary = None
+    if seg_rows:
+        primary = max(seg_rows, key=lambda s: (s.get("end", 0) - s.get("start", 0))).get("topic")
+    topics, seen = [], set()
+    for s in seg_rows:
+        tp = s.get("topic")
+        if tp and tp not in seen:
+            seen.add(tp); topics.append(tp)
+    all_tags, seen_t = [], set()
+    for s in seg_rows:
+        for tg in s.get("tags", []):
+            if tg and tg not in seen_t:
+                seen_t.add(tg); all_tags.append(tg)
     return {
-        "subject": _mode(_vals("subject")),
-        "grade": _mode(_vals("grade_level")),
-        "difficulty": _mode(_vals("difficulty")),
-        "primary_topic": _mode(_vals("topic")),
-        "topics": topics,        # every distinct segment topic (for browsing)
-        "all_tags": tags,        # union of segment tags (search / dedupe keys)
+        "subject": Counter(subjects).most_common(1)[0][0] if subjects else None,
+        "grade": Counter(grades).most_common(1)[0][0] if grades else None,
+        "difficulty": max(diffs, key=lambda d: _DIFF_RANK.get(d, 0)) if diffs else None,
+        "primary_topic": primary,
+        "topics": topics,
+        "all_tags": all_tags,
     }
 
 
 def build_result(payload: dict) -> dict:
     frames = payload.get("frame_analyses", [])
+    rt = payload.get("runtime", {}) or {}
+    seg_rows = [{
+        "segment": i,
+        "start": round(float(s["start"]), 1),
+        "end": round(float(s["end"]), 1),
+        "topic": (s.get("llm") or {}).get("topic"),
+        "subject": (s.get("llm") or {}).get("subject"),
+        "grade": (s.get("llm") or {}).get("grade_level"),
+        "difficulty": (s.get("llm") or {}).get("difficulty"),
+        "content_type": (s.get("llm") or {}).get("content_type"),
+        "tags": (s.get("llm") or {}).get("tags", []),
+        "subtopics": (s.get("llm") or {}).get("subtopics", []),
+        "summary": (s.get("llm") or {}).get("summary"),
+        "confidence": (s.get("llm") or {}).get("confidence"),
+        "dominant_scene": _dominant_scene(s, frames),
+        # objects are already suppressed upstream for synthetic scenes
+        "objects_detected": s.get("objects", []),
+    } for i, s in enumerate(payload["segments"], start=1)]
     return {
         "video_id": payload["video_id"][:8],
         "source": payload["source_path"],
         "processed_at": datetime.now(timezone.utc).isoformat(),
-        "os": f"{platform.system()} {platform.release()}",
-        "python": platform.python_version(),
+        # provenance reflects WHERE it was processed (Kaggle), from payload.runtime,
+        # not the machine writing this file.
+        "os": rt.get("os") or f"{platform.system()} {platform.release()}",
+        "python": rt.get("python") or platform.python_version(),
+        "gpu": rt.get("gpu"),
+        "profile": rt.get("profile"),
+        "package_version": rt.get("package_version"),
         "duration_sec": round(float(payload.get("duration") or 0), 2),
         "language": payload.get("language"),
         "has_speech": payload.get("has_speech"),
         "tagging_path": payload.get("tagging_path"),
-        # VIDEO-LEVEL classification — use THIS to organize/dedupe your library:
-        "video": video_rollup(payload["segments"]),
-        "segment_count": len(payload["segments"]),
+        "segment_count": len(seg_rows),
         "pipeline_time_sec": round(sum(payload.get("stage_timings", {}).values()), 1),
         "stage_timings": payload.get("stage_timings", {}),
-        "segments": [{
-            "segment": i,
-            "start": round(float(s["start"]), 1),
-            "end": round(float(s["end"]), 1),
-            "topic": (s.get("llm") or {}).get("topic"),
-            "subject": (s.get("llm") or {}).get("subject"),
-            "grade": (s.get("llm") or {}).get("grade_level"),
-            "difficulty": (s.get("llm") or {}).get("difficulty"),
-            "content_type": (s.get("llm") or {}).get("content_type"),
-            "tags": (s.get("llm") or {}).get("tags", []),
-            "subtopics": (s.get("llm") or {}).get("subtopics", []),
-            "summary": (s.get("llm") or {}).get("summary"),
-            "confidence": (s.get("llm") or {}).get("confidence"),
-            "dominant_scene": _dominant_scene(s, frames),
-            # objects are already suppressed upstream for synthetic scenes
-            "objects_detected": s.get("objects", []),
-        } for i, s in enumerate(payload["segments"], start=1)],
+        "segments": seg_rows,
+        "video": video_rollup(seg_rows),
     }
 
 

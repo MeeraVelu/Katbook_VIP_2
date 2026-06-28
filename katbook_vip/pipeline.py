@@ -18,7 +18,7 @@ from . import audio, ingest, nlp_stage, segment, tagging
 from .export import write_results_json
 from .router import SILENT, VOICE, decide
 from .storage import store
-from .utils import (load_checkpoint, log, save_checkpoint, timer)
+from .utils import (load_checkpoint, log, save_checkpoint, timer, capture_runtime)
 
 
 def _video_id(path: str) -> str:
@@ -36,7 +36,10 @@ def process_one_video(video_path: str, cfg: dict, *, embedder, nlp,
     P: dict = {"video_id": _video_id(video_path), "source_path": video_path,
                "transcript": [], "language": None, "audio_features": {},
                "frame_analyses": [], "nlp": {}, "segments": [],
-               "stage_timings": {}, "status": "processing"}
+               "stage_timings": {}, "status": "processing",
+               # provenance of WHERE this ran (Kaggle), captured here so the
+               # laptop sync reports the true processing env, not its own.
+               "runtime": capture_runtime(cfg)}
 
     # ---- Stage 1: ingest audio + probe duration ----
     with timer(P["stage_timings"], "ingest_audio"):

@@ -142,3 +142,39 @@ def gpu_banner() -> str:
         return "CUDA off: running on CPU (slow — use Kaggle T4 x2)"
     except Exception:
         return "torch not importable yet"
+
+
+def _gpu_name() -> str | None:
+    try:
+        t = _torch()
+        if t.cuda.is_available():
+            return t.cuda.get_device_name(0)
+    except Exception:
+        pass
+    return None
+
+
+def capture_runtime(cfg: dict | None = None) -> dict:
+    """Provenance of WHERE this video was actually processed.
+
+    Captured on the processing machine (Kaggle) at processing time and stored in
+    the DB, so downstream tools (e.g. the laptop result-sync) report the true
+    processing environment instead of re-stamping themselves. This is why the
+    os/python in a result reflect Kaggle's Linux + Python, not your Windows box.
+    """
+    import platform
+    from datetime import datetime, timezone
+    rt = {
+        "os": f"{platform.system()} {platform.release()}",
+        "python": platform.python_version(),
+        "gpu": _gpu_name(),
+        "processed_on": datetime.now(timezone.utc).isoformat(),
+    }
+    if cfg:
+        rt["profile"] = cfg.get("PROFILE")
+    try:
+        from . import __version__ as _v
+        rt["package_version"] = _v
+    except Exception:
+        pass
+    return rt

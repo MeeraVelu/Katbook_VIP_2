@@ -30,6 +30,34 @@ def _merge_min_duration(segs: list[dict], min_sec: float) -> list[dict]:
     return merged
 
 
+def _split_max_duration(segs: list[dict], max_sec: float, min_sec: float) -> list[dict]:
+    """Force-split any segment longer than max_sec into ~equal sub-segments.
+
+    Semantic boundary detection can under-segment a smooth lecture into one giant
+    block (e.g. a single 3.5-minute segment covering six subtopics). This caps the
+    damage: a too-long segment is divided into the fewest equal parts that each
+    land at/under max_sec, without producing a part shorter than min_sec.
+    """
+    if not max_sec or max_sec <= 0:
+        return segs
+    out: list[dict] = []
+    for s in segs:
+        dur = s["end"] - s["start"]
+        if dur <= max_sec:
+            out.append(dict(s)); continue
+        n = int(round(dur / max_sec)) or 1
+        # never slice so fine that a part drops below the min-duration floor
+        n = min(n, max(1, int(dur // max(min_sec, 1))))
+        if n <= 1:
+            out.append(dict(s)); continue
+        step = dur / n
+        for k in range(n):
+            a = s["start"] + k * step
+            b = s["end"] if k == n - 1 else s["start"] + (k + 1) * step
+            out.append({"start": round(a, 2), "end": round(b, 2)})
+    return out
+
+
 def _cap_segments(segs: list[dict], max_segments: int) -> list[dict]:
     """If over the cap, greedily merge the shortest neighbours until within cap."""
     segs = [dict(s) for s in segs]
@@ -71,6 +99,8 @@ def segment_voiced(windows: list[dict], win_emb: np.ndarray, duration: float,
     segs = [{"start": windows[a]["start"], "end": windows[b - 1]["end"]}
             for a, b in zip(bounds[:-1], bounds[1:])]
     segs = _merge_min_duration(segs, cfg["MIN_SEGMENT_SEC"])
+    segs = _split_max_duration(segs, cfg.get("MAX_SEGMENT_SEC", 0),
+                               cfg["MIN_SEGMENT_SEC"])
     return _cap_segments(segs, cfg["MAX_SEGMENTS"])
 
 
@@ -85,6 +115,8 @@ def segment_silent(frames: list[dict], duration: float, cfg: dict) -> list[dict]
             cur = {"start": f["time"], "scene": f.get("scene")}
     segs.append({"start": cur["start"], "end": duration})
     segs = _merge_min_duration(segs, cfg["MIN_SEGMENT_SEC"])
+    segs = _split_max_duration(segs, cfg.get("MAX_SEGMENT_SEC", 0),
+                               cfg["MIN_SEGMENT_SEC"])
     return _cap_segments(segs, cfg["MAX_SEGMENTS"])
 
 

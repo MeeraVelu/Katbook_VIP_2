@@ -29,7 +29,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import platform
 import re
 import sys
 import time
@@ -117,37 +116,50 @@ def _llm(raw_field) -> dict:
     return d if isinstance(d, dict) else {}
 
 
-def _video_rollup(segs_llm: list[dict]) -> dict:
-    """Same video-level classification as katbook_vip/export.py.video_rollup, but
-    from already-parsed per-segment llm dicts (from the DB)."""
-    from collections import Counter
+_DIFF_RANK = {"beginner": 0, "intermediate": 1, "advanced": 2, "expert": 3}
 
-    def _mode(xs):
-        return Counter(xs).most_common(1)[0][0] if xs else None
-    subjects = [l.get("subject") for l in segs_llm if l.get("subject")]
-    grades = [l.get("grade_level") for l in segs_llm if l.get("grade_level")]
-    diffs = [l.get("difficulty") for l in segs_llm if l.get("difficulty")]
-    topics, tags = [], []
-    for l in segs_llm:
-        if l.get("topic") and l["topic"] not in topics:
-            topics.append(l["topic"])
-        for t in l.get("tags", []):
-            if t not in tags:
-                tags.append(t)
-    return {"subject": _mode(subjects), "grade": _mode(grades),
-            "difficulty": _mode(diffs), "primary_topic": _mode(topics),
-            "topics": topics, "all_tags": tags}
+
+def _video_rollup(seg_rows: list[dict]) -> dict:
+    """Same aggregation as katbook_vip/export.video_rollup, kept in sync so the
+    JSON this laptop writes matches the JSON Kaggle writes exactly."""
+    from collections import Counter
+    subjects = [s["subject"] for s in seg_rows if s.get("subject")]
+    grades = [s["grade"] for s in seg_rows if s.get("grade")]
+    diffs = [s["difficulty"] for s in seg_rows if s.get("difficulty")]
+    primary = None
+    if seg_rows:
+        primary = max(seg_rows,
+                      key=lambda s: (s.get("end", 0) - s.get("start", 0))).get("topic")
+    topics, seen = [], set()
+    for s in seg_rows:
+        tp = s.get("topic")
+        if tp and tp not in seen:
+            seen.add(tp); topics.append(tp)
+    all_tags, seen_t = [], set()
+    for s in seg_rows:
+        for tg in s.get("tags", []):
+            if tg and tg not in seen_t:
+                seen_t.add(tg); all_tags.append(tg)
+    return {
+        "subject": Counter(subjects).most_common(1)[0][0] if subjects else None,
+        "grade": Counter(grades).most_common(1)[0][0] if grades else None,
+        "difficulty": max(diffs, key=lambda d: _DIFF_RANK.get(d, 0)) if diffs else None,
+        "primary_topic": primary,
+        "topics": topics,
+        "all_tags": all_tags,
+    }
 
 
 def build_results(engine) -> list[dict]:
     """Rebuild the same flat result dict shape as katbook_vip/export.py, but from
-    the stored DB rows (including has_speech / tagging_path / language)."""
+    the stored DB rows — including runtime provenance (so os/python reflect the
+    Kaggle processing env, not this laptop) and the video-level rollup."""
     from sqlalchemy import text as sql
     out = []
     with engine.connect() as cx:
         videos = cx.execute(sql(
             "SELECT video_id, source_path, duration, language, has_speech, "
-            "tagging_path, stage_timings, created_at "
+            "tagging_path, stage_timings, runtime, created_at "
             "FROM videos ORDER BY created_at DESC")).mappings().all()
         for v in videos:
             segs = cx.execute(sql(
@@ -155,27 +167,11 @@ def build_results(engine) -> list[dict]:
                 "FROM segments WHERE video_id=:v ORDER BY seg_index"),
                 {"v": str(v["video_id"])}).mappings().all()
             st = _j(v["stage_timings"])
-            result = {
-                "video_id": str(v["video_id"])[:8],
-                "source": v["source_path"],
-                "processed_at": v["created_at"].isoformat() if v["created_at"] else None,
-                "os": f"{platform.system()} {platform.release()}",
-                "python": platform.python_version(),
-                "duration_sec": round(float(v["duration"] or 0), 2),
-                "language": v["language"],
-                "has_speech": v["has_speech"],
-                "tagging_path": v["tagging_path"],
-                "segment_count": len(segs),
-                "pipeline_time_sec": round(sum(st.values()), 1)
-                if isinstance(st, dict) and st else None,
-                "stage_timings": st if isinstance(st, dict) else {},
-                "segments": [],
-            }
-            _seg_llms = []
+            rt = _j(v["runtime"]) if v["runtime"] is not None else {}
+            seg_rows = []
             for i, s in enumerate(segs, start=1):
                 llm = _llm(s["llm"]); scenes = _j(s["scenes"]); objects = _j(s["objects"])
-                _seg_llms.append(llm)
-                result["segments"].append({
+                seg_rows.append({
                     "segment": i,
                     "start": round(float(s["start_sec"]), 1),
                     "end": round(float(s["end_sec"]), 1),
@@ -191,8 +187,26 @@ def build_results(engine) -> list[dict]:
                     "dominant_scene": (scenes[0] if scenes else None),
                     "objects_detected": objects,
                 })
-            result["video"] = _video_rollup(_seg_llms)
-            out.append(result)
+            out.append({
+                "video_id": str(v["video_id"])[:8],
+                "source": v["source_path"],
+                "processed_at": v["created_at"].isoformat() if v["created_at"] else None,
+                "os": rt.get("os"),
+                "python": rt.get("python"),
+                "gpu": rt.get("gpu"),
+                "profile": rt.get("profile"),
+                "package_version": rt.get("package_version"),
+                "duration_sec": round(float(v["duration"] or 0), 2),
+                "language": v["language"],
+                "has_speech": v["has_speech"],
+                "tagging_path": v["tagging_path"],
+                "segment_count": len(seg_rows),
+                "pipeline_time_sec": round(sum(st.values()), 1)
+                if isinstance(st, dict) and st else None,
+                "stage_timings": st if isinstance(st, dict) else {},
+                "segments": seg_rows,
+                "video": _video_rollup(seg_rows),
+            })
     return out
 
 

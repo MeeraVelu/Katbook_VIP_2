@@ -22,7 +22,18 @@ from .utils import gpu_banner, log
 
 
 def discover_videos(cfg: dict) -> list[str]:
-    return sorted(glob.glob(cfg["VIDEO_GLOB"], recursive=True))
+    """Find videos under VIDEO_GLOB. If the glob ends in a known video extension,
+    scan for EVERY configured format at that path (so a bucket mixing .mp4/.webm/
+    .mov is fully discovered); otherwise use the glob literally."""
+    pat = cfg["VIDEO_GLOB"]
+    exts = [e.strip().lower().lstrip(".") for e in cfg.get("VIDEO_EXTS", ["mp4"]) if e.strip()]
+    base, _, ext = pat.rpartition(".")
+    if base and ext.lower() in exts:
+        found = []
+        for e in exts:
+            found += glob.glob(f"{base}.{e}", recursive=True)
+        return sorted(set(found))
+    return sorted(glob.glob(pat, recursive=True))
 
 
 def select_videos(cfg: dict, all_videos: list[str]) -> list[str]:

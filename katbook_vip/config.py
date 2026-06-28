@@ -23,6 +23,12 @@ BASE = {
     # On Kaggle every .mp4 under /kaggle/input is auto-discovered; you do not
     # edit a path. Locally, point VIDEO_GLOB at a folder of test clips.
     "VIDEO_GLOB": os.environ.get("KVIP_VIDEO_GLOB", "/kaggle/input/**/*.mp4"),
+    # Video formats discovered. ffmpeg ingests all of these; if VIDEO_GLOB ends in
+    # one of these extensions, discovery scans for ALL of them at the same path
+    # (so a bucket mixing .mp4/.webm/.mov is fully picked up). Override via env
+    # KVIP_VIDEO_EXTS="mp4,webm" to restrict.
+    "VIDEO_EXTS": os.environ.get(
+        "KVIP_VIDEO_EXTS", "mp4,webm,mov,mkv,avi,m4v").split(","),
 
     # WHICH videos the run processes (a numbered list is printed at startup):
     #   "all"                 -> every discovered video

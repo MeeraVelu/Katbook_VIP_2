@@ -1,4 +1,10 @@
-# Laptop-only tools (no GPU/ML). For pulling results and querying the database locally.
-#   pip install -r requirements-local.txt
+# Laptop-only tools (NO GPU / NO ML required) for the two helper scripts:
+#   sync_results.py  — mirror cloud Postgres results into ./results
+#   search.py        — keyword search over the database
+#       pip install -r requirements-local.txt
 SQLAlchemy>=2.0
 psycopg2-binary
+
+# OPTIONAL: enables semantic (vector) search in search.py. CPU is fine.
+# Leave commented to use keyword-only search (no heavy download).
+# sentence-transformers==4.1.0

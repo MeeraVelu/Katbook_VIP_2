@@ -1,104 +1,62 @@
-# Katbook VIP — Video Intelligence Platform (POC)
+# Katbook Video Intelligence Platform (VIP)
 
-Turn raw lecture videos into **searchable, structured knowledge**. A 6-stage GPU pipeline
-(transcribe → see → understand → segment → tag → store) converts each video into per-segment
-**topic / subject / grade / tags / summary + embeddings**, stored in cloud Postgres and queryable
-by meaning or keyword.
+Turns lecture / animation videos into **per-segment structured tags** — topic,
+subject, grade level, difficulty, tags, summary, plus a vector embedding — and
+stores them in Postgres so you can search your whole video library by *meaning*
+or by keyword.
 
-The pipeline runs **free on Kaggle's GPU**; your laptop only pulls and queries the results.
+Built to run on a **free Kaggle T4 GPU**, loading **one model into VRAM at a
+time**, and to handle **both narrated and silent videos in any language**.
 
 ```
- videos ──▶ [ 6-stage pipeline on Kaggle GPU ] ──▶ Postgres (pgvector + FTS) ──▶ JSON export + semantic/keyword search
+video → voice/silent router → transcribe (any lang) → adaptive frames
+      → CLIP scenes + gated YOLO/OCR + BLIP-2 captions → segment
+      → Qwen tags each segment → Postgres (+ results/*.json)
 ```
 
----
+## Repo layout
 
-## What's in here
+```
+katbook_vip/            the importable pipeline package (edit this in VS Code)
+  config.py             one CONFIG dict + fast/balanced/quality profiles
+  run.py                discover videos, select, run the batch  (entry point)
+  pipeline.py           process ONE video end-to-end, with per-stage timing
+  router.py             decide VOICE vs SILENT path
+  ingest.py             ffmpeg: duration, audio extract, adaptive frame plan
+  audio.py              speech detection (RMS gate) + Whisper transcription
+  visual.py             CLIP scenes, gated YOLO, gated OCR, BLIP-2 captions
+  nlp_stage.py          spaCy NER + KeyBERT keyphrases + embeddings
+  segment.py            voiced (cosine-drop) & silent (scene-group) segmentation
+  tagging.py            Qwen per-segment tags + cross-segment consistency pass
+  storage.py            idempotent upsert into Postgres (pgvector + FTS)
+  export.py             write the clean results/<name>.json
+  utils.py              managed_model() — guarantees one-model-at-a-time + VRAM free
 
-| File / dir | Purpose |
-|---|---|
-| `katbook_vip_poc.ipynb` | **The pipeline** — upload to Kaggle and run. This is the engine. |
-| `katbook_vip_poc.py` | Editable source mirror of the notebook (jupytext-style). |
-| `export_results.py` | Pull every video's result from Postgres → `results/*.json` on your laptop. |
-| `search.py` | Query the videos by meaning/keyword from your laptop (no GPU). |
-| `requirements-local.txt` | The two small libraries the laptop tools need. |
-| `docs/ARCHITECTURE.md` | Pipeline diagram, components, data model, data flow. |
-| `docs/OPERATIONS.md` | Runbook: how to run, monitor, troubleshoot. |
-| `docs/ROADMAP.md` | POC → production maturity path. |
+katbook_vip_kaggle.ipynb   thin runner: install → clone package → set CONFIG → run
+sync_results.py            LAPTOP: mirror Postgres results into ./results (--watch)
+search.py                  LAPTOP: semantic + keyword search over the DB
+requirements-local.txt     laptop-only deps (no GPU/ML) for the two scripts above
+docs/ARCHITECTURE.md       how/why the pipeline is built the way it is
+docs/OPERATIONS.md         run it on Kaggle, sync locally, troubleshoot
+```
 
----
+## Quick start
 
-## How it operates — the flow
+**On Kaggle (processing):**
+1. New Notebook → Settings → Accelerator → **GPU T4 x2**.
+2. Add Secrets: `DATABASE_URL` (your Neon/Supabase URL, required to store),
+   `HF_TOKEN` (optional).
+3. Add your videos as a Kaggle **Dataset** (any folder of `.mp4`).
+4. Open `katbook_vip_kaggle.ipynb`, set `REPO_URL` to your repo, edit `CONFIG`
+   (profile + which videos), **Run All**.
 
-1. **Input** — videos live in a Kaggle dataset. The pipeline **auto-discovers** every `.mp4`; no
-   path editing.
-2. **Process** — for each video, 6 stages run on Kaggle's GPU, loading→using→freeing each model so
-   a 16 GB T4 never overflows. The LLM fuses transcript + visual + NLP signals into strict JSON tags.
-3. **Store** — results are written to **cloud Postgres** (`videos` + `segments`), with a stable
-   `video_id` so re-runs **update instead of duplicate**. Postgres is the single source of truth.
-4. **Use** — from your laptop, `export_results.py` pulls clean per-video JSON, and `search.py`
-   (or the notebook's Gradio UI) finds the exact segment that answers a question.
-
-Full diagram + data model: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
-
----
-
-## Quickstart (the recommended POC run)
-
-**One-time setup** (~15 min): a free [Neon](https://neon.tech) Postgres, a HuggingFace token, and a
-Kaggle account. Details in **[docs/OPERATIONS.md](docs/OPERATIONS.md)**.
-
-1. **Upload** `katbook_vip_poc.ipynb` to Kaggle (**File → Import Notebook**).
-2. **Settings:** GPU **T4 ×2**, Internet **On**. **Secrets:** `DATABASE_URL`, `HF_TOKEN`.
-   **Add Input:** your video dataset.
-3. **Cell 0:** set `CONFIG["PROCESS"]` — `"all"`, `"first"`, or a **number** to pick one video
-   from the printed list. Leave `FAST_MODE=True` (≈ 4 min/video).
-4. **Save Version → "Save & Run All (Commit)".** Close the tab — it runs headless (~12 h cap).
-5. On your laptop, pull the results:
-   ```bash
-   pip install -r requirements-local.txt                  # once
-   echo "postgresql://...your Neon url..." > db_url.txt    # once (gitignored)
-   python export_results.py                                # -> results/*.json
-   ```
-
-> Want results to appear automatically while it runs? `python export_results.py --watch`.
-
-### Query your videos (from the laptop, no GPU)
+**On your laptop (reading results):**
 ```bash
+pip install -r requirements-local.txt
+set DATABASE_URL=postgresql://user:pass@host/db      # or put it in db_url.txt
+python sync_results.py --watch                        # results/ fills in by itself
 python search.py "time period of a pendulum"
-python search.py "rational numbers" --subject Mathematics --k 5
-python search.py "oscillation" --mode fts        # keyword-only (no ML libs needed)
 ```
 
----
-
-## Run modes at a glance
-
-| Goal | Use | Notes |
-|---|---|---|
-| **Reliable POC run** | Kaggle **Save & Run All (commit)** | headless, reproducible — **recommended** |
-| Quick interactive check | Kaggle **Run All** | keep the tab open while it runs |
-
----
-
-## Output example (one segment)
-
-```json
-{
-  "segment": 1, "start": 0.0, "end": 150.0,
-  "topic": "Simple Pendulum", "subject": "Physics", "grade": "High School",
-  "difficulty": "beginner", "content_type": "lecture",
-  "tags": ["simple pendulum", "time period", "oscillations", "bob", "string"],
-  "summary": "Explains the mechanics of a simple pendulum and how its length affects the time period.",
-  "confidence": 0.95, "dominant_scene": "animated visualization",
-  "objects_detected": ["clock", "tv"]
-}
-```
-
----
-
-## Notes
-- **POC model swaps** (to fit a free T4): Qwen3-32B → Qwen2.5-7B 4-bit, plus FAST_MODE lighter
-  Whisper/CLIP/YOLO. Same architecture, smaller models. See [docs/ROADMAP.md](docs/ROADMAP.md).
-- **Data is durable.** Everything lives in Postgres; Kaggle sessions ending never lose results.
-- **Secrets** (`db_url.txt`) are gitignored — never committed.
+See **docs/OPERATIONS.md** for the full runbook and **docs/ARCHITECTURE.md** for
+the design (voice/silent routing, the speed wins, one-model-at-a-time).

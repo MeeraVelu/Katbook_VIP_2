@@ -1,65 +1,79 @@
-# Operations Runbook
+# Operations
 
-How to run, monitor, and troubleshoot the POC. Two ways to run — pick by goal.
+## A. Process videos on Kaggle
 
-## Run options (both use Kaggle's GPU; both write to the same Postgres)
+1. **Notebook + GPU.** New Notebook → Settings → Accelerator → **GPU T4 x2**.
+   (The pipeline uses one GPU; T4 x2 just gives headroom.)
+2. **Secrets** (Add-ons → Secrets):
+   * `DATABASE_URL` — your Neon/Supabase Postgres URL. *Required to store.*
+     Without it the run still works but only writes the `results/` JSON.
+   * `HF_TOKEN` — optional. The models used here (Whisper, CLIP, YOLO, BLIP-2,
+     Qwen2.5) are **not gated**, so you usually don't need it.
+3. **Add your videos.** Put a folder of `.mp4` into a Kaggle **Dataset** and
+   attach it with **+ Add Input**. They appear under `/kaggle/input/...` and are
+   auto-discovered (no path editing).
+4. **Point at your package.** In Cell 0 set `REPO_URL` to your GitHub repo
+   (public = no auth needed). If git is blocked, attach the package as a Dataset
+   instead — Cell 2 falls back to it automatically.
+5. **Edit `CONFIG`** (Cell 0): pick `PROFILE` (`fast` for free T4) and `PROCESS`
+   (`"all"`, `"first"`, a number from the printed list, or a filename substring).
+6. **Run All.** Watch the per-stage log: each stage prints its time and the VRAM
+   before/after, so you can confirm memory returns to baseline between models.
 
-| # | Method | When to use | Keeps running unattended? |
-|---|---|---|---|
-| **1** | **Kaggle → Save & Run All (commit)** | ✅ **Recommended** — reliable, reproducible | **Yes** (headless, ~12 h cap) |
-| 2 | Kaggle → interactive Run All | quick checks while watching | No (session must stay open) |
+Re-running is safe: finished videos (already in Postgres) are skipped. To force a
+redo after changing a prompt/model, set `CONFIG["SKIP_EXISTING"] = False`.
 
-> The VS Code↔Kaggle **tunnel** is a *development* convenience only. It dies when the Kaggle
-> session stops, so do **not** use it for unattended runs. Use option 1.
->
-> Running off-Kaggle (your own/cloud GPU) is a future step — see [ROADMAP.md](ROADMAP.md).
+## B. Pull results to your laptop (VS Code)
 
----
+```bash
+# from D:\Katbook_VIP_2
+pip install -r requirements-local.txt
 
-## Option 1 — Kaggle committed run (recommended)
+# give the scripts the DB URL (either one):
+set DATABASE_URL=postgresql://user:pass@host/db      # Windows cmd
+$env:DATABASE_URL="postgresql://..."                 # PowerShell
+#   ...or write the URL on one line in  db_url.txt  next to the scripts.
 
-**One-time setup** (see [../README.md](../README.md)): Neon Postgres, HF token, upload the
-notebook, attach the dataset, add `DATABASE_URL` + `HF_TOKEN` secrets, GPU T4×2, Internet On.
+python sync_results.py            # one-shot: writes results/<name>.json
+python sync_results.py --watch    # keeps mirroring every 30s while Kaggle runs
+```
 
-**Each run:**
-1. Open the notebook on kaggle.com.
-2. In **Cell 0** set `CONFIG["PROCESS"]` — `"all"`, `"first"`, a **number** (pick one video by
-   the printed list), or a filename substring.
-3. **Save Version → "Save & Run All (Commit)" → Save.**
-4. Close the tab. It runs in the background (≈4 min/video FAST_MODE).
-5. When the version goes green, pull results on your laptop:
-   ```bash
-   python export_results.py        # DB -> results/*.json
-   ```
+`results/<name>.json` is the same shape the notebook writes, so you get one file
+per video plus `all_results.json`. The `results/` folder is git-ignored — it's a
+cache; Postgres is the source of truth.
 
-**Live results while it runs:** start the watcher on your laptop first —
-`python export_results.py --watch` — and JSONs appear as each video lands in Postgres.
+## C. Search what you've processed
 
----
+```bash
+python search.py "time period of a pendulum"
+python search.py "rational numbers" --subject Mathematics --k 5
+python search.py "atom bonding" --silent     # only silent-video segments
+python search.py "oscillation"   --mode fts  # keyword-only (no ML deps needed)
+```
 
-## Pre-flight checklist (prevents 90% of failures)
+Semantic search is automatic when `sentence-transformers` is installed (CPU is
+fine); otherwise it falls back to Postgres full-text search.
 
-- [ ] GPU = **T4 ×2**, **Internet = On**
-- [ ] Secrets `DATABASE_URL` **and** `HF_TOKEN` attached
-- [ ] Dataset attached → Cell 0 prints `Discovered N video(s)`
-- [ ] `CONFIG["PROCESS"]` set to what you intend
-- [ ] Using the **latest** notebook (batch-only, numpy-safe Cell 1)
+## D. Tuning
 
-## Troubleshooting
+* **Too slow / OOM** → keep `PROFILE="fast"`. It already uses the smallest viable
+  models and the fewest frames.
+* **Silent video, non-English on-screen text** → add scripts to `OCR_LANGS`, e.g.
+  `["en","ta"]`. If Tamil OCR weights fail to load, it falls back to English and
+  keeps going (the spoken transcript path is unaffected — Whisper is multilingual
+  regardless).
+* **Segments too coarse/fine** → adjust `MIN_SEGMENT_SEC` and `MAX_SEGMENTS` in
+  `config.py`.
+* **Voice/silent misclassified** → adjust `SILENCE_DB` (default -50) and
+  `MIN_SPEECH_SEC` (default 3).
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| `torch has no attribute fx` on import | a dep downgraded numpy below the torch ABI | Cell 1 already restores base numpy; if it persists, **Factory reset** then run |
-| `NameError: DATABASE_URL` | secret not loaded this session | run the secrets cell / set env; batch cell self-bootstraps it |
-| `schema "np" does not exist` | numpy float passed to psycopg2 | already fixed (start/end cast to `float`) |
-| `Modality 'audio' not supported` | sentence-transformers v5 vs KeyBERT | pinned `sentence-transformers==4.1.0` |
-| `_parse_error` in `llm` | LLM JSON truncated / fenced | raised tokens to 400 + robust parser; `export_results.py` also recovers it |
-| `Video not found` | wrong path | irrelevant now — auto-discovery globs `/kaggle/input/**/*.mp4` |
-| `CUDA out of memory` | model too big | keep `FAST_MODE=true`, or lower `MAX_FRAMES` |
-| Duplicate rows in DB | random ids on re-run | fixed — `video_id = uuid5(path)` upserts |
+## E. Troubleshooting
 
-## Housekeeping
-
-- **Clear everything for a fresh run:** `TRUNCATE segments, videos RESTART IDENTITY CASCADE;` (Neon SQL editor) + delete `results/*.json`.
-- **GPU quota:** 30 GPU-hrs/week. FAST_MODE ≈ 4 min/video → ~150 videos/week. Stop idle sessions.
-- **Secrets:** never commit `db_url.txt` / `.env` (both gitignored). Rotate the Neon password if it leaks.
+| Symptom | Cause / fix |
+|---|---|
+| `import torch` fails after install | numpy got bumped. The installer restores the base numpy automatically; if you edited it, re-run Cell 1. |
+| No results stored, only JSON | `DATABASE_URL` secret missing or wrong. Check Cell 3 output. |
+| Qwen OOM | Ensure only the `fast` profile, GPU T4 selected, and you didn't disable the 4-bit load. Each model frees before the next via `managed_model`. |
+| Hallucinated objects in tags | Should be gone (YOLO gated to real-world scenes). If you widened `REALWORLD_SCENES`, you re-enabled it. |
+| Tamil OCR error in logs | Expected fallback to English; not fatal. |
+| Session died mid-batch | Just re-run; finished videos are skipped, transcripts are checkpointed. |

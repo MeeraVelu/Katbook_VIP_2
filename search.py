@@ -1,26 +1,30 @@
 """
 search.py — query processed videos straight from cloud Postgres (no Kaggle, no GPU).
 
-Full-text + tag filters need only SQLAlchemy. Semantic search additionally needs
-sentence-transformers (CPU is fine); it's used automatically if available.
+Semantic search (pgvector) is used automatically when sentence-transformers is
+installed (CPU is fine); otherwise it falls back to Postgres full-text search,
+which needs only SQLAlchemy. Results carry topic/subject and the voiced/silent
+flag so you can tell narrated segments from silent-animation ones.
 
-USAGE (from d:\\Katbook_VIP_2):
+USAGE (from  D:\\Katbook_VIP_2 ):
     python search.py "time period of a pendulum"
     python search.py "rational numbers" --subject Mathematics --k 5
+    python search.py "atom bonding" --silent          # only silent-video segments
     python search.py "oscillation" --mode fts          # force keyword-only (no ML deps)
 
-DB URL comes from env DATABASE_URL or db_url.txt (same as export_results.py).
+DB URL comes from env DATABASE_URL or db_url.txt (same as sync_results.py).
 """
+from __future__ import annotations
+
+import argparse
 import os
 import sys
-import json
-import argparse
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 
 
-def get_db_url():
+def get_db_url() -> str:
     url = os.environ.get("DATABASE_URL")
     if not url and (HERE / "db_url.txt").exists():
         url = (HERE / "db_url.txt").read_text(encoding="utf-8").strip()
@@ -33,8 +37,8 @@ def get_db_url():
     return url
 
 
-def embed(query):
-    """Return a normalized embedding for semantic search, or None if unavailable."""
+def embed(query: str):
+    """Normalized embedding for semantic search, or None if deps are missing."""
     try:
         from sentence_transformers import SentenceTransformer
         model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cpu")
@@ -48,31 +52,40 @@ def main():
     ap.add_argument("query")
     ap.add_argument("--mode", choices=["auto", "semantic", "fts"], default="auto")
     ap.add_argument("--subject"); ap.add_argument("--grade"); ap.add_argument("--ctype")
+    ap.add_argument("--silent", action="store_true", help="only silent-video segments")
+    ap.add_argument("--voice", action="store_true", help="only narrated-video segments")
     ap.add_argument("--k", type=int, default=5)
     args = ap.parse_args()
 
     from sqlalchemy import create_engine, text as sql
     eng = create_engine(get_db_url(), pool_pre_ping=True)
 
+    # Filters live on segments.llm (JSONB) and the videos.has_speech flag (join).
     filt, params = [], {"q": args.query, "k": args.k}
-    if args.subject: filt.append("llm->>'subject' = :subject"); params["subject"] = args.subject
-    if args.grade:   filt.append("llm->>'grade_level' = :grade"); params["grade"] = args.grade
-    if args.ctype:   filt.append("llm->>'content_type' = :ctype"); params["ctype"] = args.ctype
+    join = ""
+    if args.subject: filt.append("s.llm->>'subject' = :subject"); params["subject"] = args.subject
+    if args.grade:   filt.append("s.llm->>'grade_level' = :grade"); params["grade"] = args.grade
+    if args.ctype:   filt.append("s.llm->>'content_type' = :ctype"); params["ctype"] = args.ctype
+    if args.silent or args.voice:
+        join = "JOIN videos v ON v.video_id = s.video_id"
+        filt.append("v.has_speech = :hs"); params["hs"] = bool(args.voice)
     where = (" AND " + " AND ".join(filt)) if filt else ""
 
     qv = embed(args.query) if args.mode in ("auto", "semantic") else None
     if qv is not None:
         params["qv"] = str(qv)
-        stmt = sql(f"""SELECT video_id, seg_index, start_sec, end_sec,
-            llm->>'topic' AS topic, llm->>'subject' AS subject,
-            1 - (embedding <=> :qv) AS score
-            FROM segments WHERE TRUE {where} ORDER BY embedding <=> :qv LIMIT :k""")
+        stmt = sql(f"""SELECT s.video_id, s.seg_index, s.start_sec, s.end_sec,
+            s.llm->>'topic' AS topic, s.llm->>'subject' AS subject,
+            1 - (s.embedding <=> :qv) AS score
+            FROM segments s {join} WHERE TRUE {where}
+            ORDER BY s.embedding <=> :qv LIMIT :k""")
         mode = "semantic (pgvector)"
     else:
-        stmt = sql(f"""SELECT video_id, seg_index, start_sec, end_sec,
-            llm->>'topic' AS topic, llm->>'subject' AS subject,
-            ts_rank(fts, plainto_tsquery('english', :q)) AS score
-            FROM segments WHERE fts @@ plainto_tsquery('english', :q) {where}
+        stmt = sql(f"""SELECT s.video_id, s.seg_index, s.start_sec, s.end_sec,
+            s.llm->>'topic' AS topic, s.llm->>'subject' AS subject,
+            ts_rank(s.fts, plainto_tsquery('english', :q)) AS score
+            FROM segments s {join}
+            WHERE s.fts @@ plainto_tsquery('english', :q) {where}
             ORDER BY score DESC LIMIT :k""")
         mode = "full-text (tsvector)"
 
@@ -84,7 +97,8 @@ def main():
         print("(no matches — try --mode fts, loosen filters, or another query)")
         return
     for r in rows:
-        ts = f"{int(r.start_sec//60)}:{int(r.start_sec%60):02d}-{int(r.end_sec//60)}:{int(r.end_sec%60):02d}"
+        ts = (f"{int(r.start_sec // 60)}:{int(r.start_sec % 60):02d}-"
+              f"{int(r.end_sec // 60)}:{int(r.end_sec % 60):02d}")
         print(f"  [{ts}] {r.topic}  ({r.subject})  score={float(r.score or 0):.3f}  "
               f"video={str(r.video_id)[:8]} seg={r.seg_index}")
 

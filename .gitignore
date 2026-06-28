@@ -6,7 +6,11 @@ db_url.txt
 __pycache__/
 *.pyc
 .venv/
+*.egg-info/
+build/
+dist/
 
-# generated artifacts (pulled from Postgres on demand)
+# generated artifacts (rebuilt from Postgres on demand)
 results/
+checkpoints/
 payload.json

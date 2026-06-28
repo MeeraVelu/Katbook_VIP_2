@@ -96,27 +96,35 @@ def _parse_llm(raw: str) -> dict:
     return out or {"_parse_error": raw[:300]}
 
 
-def _consistency_pass(segments: list[dict]) -> None:
-    """Reconcile per-segment subject/grade to the video-level majority.
+def _dominant_value(segments: list[dict], field: str):
+    """Video-level value for a per-segment field: the most common one, with ties
+    broken by the HIGHEST-CONFIDENCE segment (so a 1-1 split still resolves)."""
+    vals = [(s.get("llm", {}).get(field), float(s.get("llm", {}).get("confidence") or 0))
+            for s in segments if s.get("llm", {}).get(field)]
+    if not vals:
+        return None
+    counts = Counter(v for v, _ in vals)
+    top, n = counts.most_common(1)[0]
+    if list(counts.values()).count(n) > 1:        # tie -> highest-confidence segment wins
+        top = max(vals, key=lambda x: x[1])[0]
+    return top
 
-    Single-topic lecture videos should not flip subject between segments. We take
-    the most common non-empty subject (and grade) across segments and overwrite
-    clear outliers, recording the original under 'subject_raw' for traceability.
+
+def _consistency_pass(segments: list[dict]) -> None:
+    """Unify subject + grade across ALL segments of ONE video.
+
+    A single coherent video should carry one subject and one grade — but the LLM
+    tags each segment independently and can disagree (e.g. seg1 'Chemistry/Grade
+    9-10', seg2 'Mathematics/Grade 7-8'). We always reconcile to the video-level
+    dominant value (ties broken by confidence) and apply it to every segment,
+    keeping the original under *_raw. Per-segment topic/subtopics/tags stay distinct
+    so fine-grained access still works.
     """
-    subjects = [s.get("llm", {}).get("subject") for s in segments
-                if s.get("llm", {}).get("subject")]
-    grades = [s.get("llm", {}).get("grade_level") for s in segments
-              if s.get("llm", {}).get("grade_level")]
-    if not subjects:
-        return
-    dom_subject = Counter(subjects).most_common(1)[0][0]
-    dom_grade = Counter(grades).most_common(1)[0][0] if grades else None
-    # only reconcile when there is a clear majority (>= 60% agreement)
-    if Counter(subjects).most_common(1)[0][1] / len(subjects) < 0.6:
-        return
+    dom_subject = _dominant_value(segments, "subject")
+    dom_grade = _dominant_value(segments, "grade_level")
     for s in segments:
         llm = s.get("llm", {})
-        if llm.get("subject") and llm["subject"] != dom_subject:
+        if dom_subject and llm.get("subject") and llm["subject"] != dom_subject:
             llm["subject_raw"] = llm["subject"]
             llm["subject"] = dom_subject
         if dom_grade and llm.get("grade_level") and llm["grade_level"] != dom_grade:

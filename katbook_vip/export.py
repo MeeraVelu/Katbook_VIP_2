@@ -31,6 +31,33 @@ def _dominant_scene(seg: dict, frames: list[dict]) -> str | None:
     return (seg.get("scenes") or [None])[0]
 
 
+def video_rollup(segments: list[dict]) -> dict:
+    """One classification for the WHOLE video — what you index/dedupe the library on.
+    subject/grade/difficulty are already unified by the consistency pass; topics and
+    tags are aggregated across segments (unique, order-preserving)."""
+    def _vals(field):
+        return [(s.get("llm") or {}).get(field) for s in segments
+                if (s.get("llm") or {}).get(field)]
+    def _mode(xs):
+        return Counter(xs).most_common(1)[0][0] if xs else None
+    topics, tags = [], []
+    for s in segments:
+        llm = s.get("llm") or {}
+        if llm.get("topic") and llm["topic"] not in topics:
+            topics.append(llm["topic"])
+        for t in llm.get("tags", []):
+            if t not in tags:
+                tags.append(t)
+    return {
+        "subject": _mode(_vals("subject")),
+        "grade": _mode(_vals("grade_level")),
+        "difficulty": _mode(_vals("difficulty")),
+        "primary_topic": _mode(_vals("topic")),
+        "topics": topics,        # every distinct segment topic (for browsing)
+        "all_tags": tags,        # union of segment tags (search / dedupe keys)
+    }
+
+
 def build_result(payload: dict) -> dict:
     frames = payload.get("frame_analyses", [])
     return {
@@ -43,6 +70,8 @@ def build_result(payload: dict) -> dict:
         "language": payload.get("language"),
         "has_speech": payload.get("has_speech"),
         "tagging_path": payload.get("tagging_path"),
+        # VIDEO-LEVEL classification — use THIS to organize/dedupe your library:
+        "video": video_rollup(payload["segments"]),
         "segment_count": len(payload["segments"]),
         "pipeline_time_sec": round(sum(payload.get("stage_timings", {}).values()), 1),
         "stage_timings": payload.get("stage_timings", {}),

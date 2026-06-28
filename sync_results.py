@@ -117,6 +117,28 @@ def _llm(raw_field) -> dict:
     return d if isinstance(d, dict) else {}
 
 
+def _video_rollup(segs_llm: list[dict]) -> dict:
+    """Same video-level classification as katbook_vip/export.py.video_rollup, but
+    from already-parsed per-segment llm dicts (from the DB)."""
+    from collections import Counter
+
+    def _mode(xs):
+        return Counter(xs).most_common(1)[0][0] if xs else None
+    subjects = [l.get("subject") for l in segs_llm if l.get("subject")]
+    grades = [l.get("grade_level") for l in segs_llm if l.get("grade_level")]
+    diffs = [l.get("difficulty") for l in segs_llm if l.get("difficulty")]
+    topics, tags = [], []
+    for l in segs_llm:
+        if l.get("topic") and l["topic"] not in topics:
+            topics.append(l["topic"])
+        for t in l.get("tags", []):
+            if t not in tags:
+                tags.append(t)
+    return {"subject": _mode(subjects), "grade": _mode(grades),
+            "difficulty": _mode(diffs), "primary_topic": _mode(topics),
+            "topics": topics, "all_tags": tags}
+
+
 def build_results(engine) -> list[dict]:
     """Rebuild the same flat result dict shape as katbook_vip/export.py, but from
     the stored DB rows (including has_speech / tagging_path / language)."""
@@ -149,8 +171,10 @@ def build_results(engine) -> list[dict]:
                 "stage_timings": st if isinstance(st, dict) else {},
                 "segments": [],
             }
+            _seg_llms = []
             for i, s in enumerate(segs, start=1):
                 llm = _llm(s["llm"]); scenes = _j(s["scenes"]); objects = _j(s["objects"])
+                _seg_llms.append(llm)
                 result["segments"].append({
                     "segment": i,
                     "start": round(float(s["start_sec"]), 1),
@@ -167,6 +191,7 @@ def build_results(engine) -> list[dict]:
                     "dominant_scene": (scenes[0] if scenes else None),
                     "objects_detected": objects,
                 })
+            result["video"] = _video_rollup(_seg_llms)
             out.append(result)
     return out
 

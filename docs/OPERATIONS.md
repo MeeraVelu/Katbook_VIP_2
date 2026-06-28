@@ -23,6 +23,37 @@
 Re-running is safe: finished videos (already in Postgres) are skipped. To force a
 redo after changing a prompt/model, set `CONFIG["SKIP_EXISTING"] = False`.
 
+## A2. Run headless from the CLI (no website)
+
+Instead of opening the notebook and clicking **Run All**, push and run it from the
+command line. Results still land in Postgres; this only replaces the manual click.
+
+One-time setup:
+1. `pip install -r requirements-local.txt` (installs the `kaggle` CLI).
+2. Put your Kaggle API token at `C:\Users\<you>\.kaggle\kaggle.json` (Windows) or
+   `~/.kaggle/kaggle.json` (Linux/Mac, then `chmod 600`). Get it from kaggle.com →
+   Settings → API → Create New Token.
+3. In `kernel-metadata.json`, set `dataset_sources` to your video dataset slug.
+4. Run `python kaggle_run.py --push-only` once to create the kernel, then open it on
+   kaggle.com and attach Secrets `DATABASE_URL` (+ optional `HF_TOKEN`). Secrets
+   can't be set via CLI; after attaching once they're reused on every push.
+
+Each run:
+```bash
+git push                  # the notebook clones the package from GitHub, so push first
+python kaggle_run.py      # push notebook -> run on GPU -> wait -> mirror results to ./results
+```
+
+Other modes: `python kaggle_run.py --push-only` (fire-and-forget),
+`python kaggle_run.py --status` (check a run), `python kaggle_run.py --no-sync`
+(don't pull results afterwards).
+
+Notes:
+- The CLI enables a GPU but cannot pick the exact accelerator (e.g. T4 x2); Kaggle
+  assigns one. Any CUDA GPU works for the pipeline.
+- For full set-and-forget, the Kaggle notebook UI also has a **Schedule** option
+  (daily/weekly) that runs it automatically with no local machine involved.
+
 ## B. Pull results to your laptop (VS Code)
 
 ```bash

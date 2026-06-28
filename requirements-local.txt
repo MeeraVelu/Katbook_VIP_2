@@ -5,6 +5,9 @@
 SQLAlchemy>=2.0
 psycopg2-binary
 
+# Kaggle CLI — push/run the notebook headless and poll status (kaggle_run.py).
+kaggle>=1.6
+
 # OPTIONAL: enables semantic (vector) search in search.py. CPU is fine.
 # Leave commented to use keyword-only search (no heavy download).
 # sentence-transformers==4.1.0

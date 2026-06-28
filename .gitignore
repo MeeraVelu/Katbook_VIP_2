@@ -2,6 +2,10 @@
 db_url.txt
 .env
 
+# Kaggle API token — never commit
+kaggle.json
+.kaggle/
+
 # Python
 __pycache__/
 *.pyc

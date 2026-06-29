@@ -43,6 +43,9 @@ BASE = {
     # Re-running never duplicates or redoes a video already in Postgres.
     # Set False to FORCE reprocessing (e.g. after changing the prompt/models).
     "SKIP_EXISTING": os.environ.get("KVIP_SKIP_EXISTING", "1") != "0",
+    # Exact-duplicate (file-hash) detection: a byte-identical re-upload is
+    # recorded as a reference to the original and skipped before any GPU work.
+    "DEDUP_BY_HASH": os.environ.get("KVIP_DEDUP_BY_HASH", "1") != "0",
 
     # OUTPUT -------------------------------------------------------------- #
     "WORK_DIR": os.environ.get("KVIP_WORK_DIR", "/kaggle/working"),

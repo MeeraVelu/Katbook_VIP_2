@@ -38,6 +38,43 @@ def existing_video_ids(engine) -> set[str]:
         return set()  # tables not created yet (first run)
 
 
+def find_canonical_by_hash(engine, content_hash: str, exclude_id: str) -> str | None:
+    """Return the video_id of an already-stored, NON-duplicate video that has the
+    same file hash (the canonical), or None. Lets us skip re-processing an exact
+    re-upload. Safe on the very first run (tables may not exist yet)."""
+    if not content_hash:
+        return None
+    from sqlalchemy import text as sql
+    try:
+        with engine.connect() as cx:
+            row = cx.execute(sql(
+                "SELECT video_id FROM videos WHERE content_hash=:h "
+                "AND COALESCE(is_duplicate, FALSE)=FALSE AND video_id<>:vid "
+                "ORDER BY created_at LIMIT 1"),
+                {"h": content_hash, "vid": exclude_id}).first()
+        return str(row[0]) if row else None
+    except Exception:
+        return None
+
+
+def store_duplicate(engine, video_id: str, source_path: str,
+                    content_hash: str, canonical_id: str) -> None:
+    """Record a duplicate as a lightweight videos row pointing at its canonical,
+    WITHOUT segments (the canonical already holds them). This is what turns a
+    re-upload into a stored reference instead of reprocessed, re-stored content."""
+    from sqlalchemy import text as sql
+    with engine.begin() as cx:
+        _ensure_schema(cx, 384)
+        cx.execute(sql("""
+            INSERT INTO videos(video_id, source_path, content_hash,
+                is_duplicate, canonical_video_id)
+            VALUES (:vid,:sp,:h,TRUE,:can)
+            ON CONFLICT (video_id) DO UPDATE SET
+                is_duplicate=TRUE, canonical_video_id=:can, content_hash=:h"""),
+            {"vid": video_id, "sp": source_path, "h": content_hash, "can": canonical_id})
+    log(f"duplicate recorded -> canonical {canonical_id[:8]} (no reprocessing)")
+
+
 def _ensure_schema(cx, dim: int) -> None:
     from sqlalchemy import text as sql
     cx.execute(sql("CREATE EXTENSION IF NOT EXISTS vector"))
@@ -46,6 +83,8 @@ def _ensure_schema(cx, dim: int) -> None:
             video_id UUID PRIMARY KEY, source_path TEXT, duration FLOAT,
             language TEXT, has_speech BOOLEAN, tagging_path TEXT,
             audio_features JSONB, nlp JSONB, stage_timings JSONB, runtime JSONB,
+            content_hash TEXT, is_duplicate BOOLEAN DEFAULT FALSE,
+            canonical_video_id UUID,
             created_at TIMESTAMPTZ DEFAULT now())"""))
     cx.execute(sql(f"""
         CREATE TABLE IF NOT EXISTS segments (
@@ -60,8 +99,12 @@ def _ensure_schema(cx, dim: int) -> None:
     cx.execute(sql("CREATE INDEX IF NOT EXISTS seg_fts_idx ON segments USING GIN(fts)"))
     # idempotent column adds for DBs created by an earlier schema version
     for col, typ in (("has_speech", "BOOLEAN"), ("tagging_path", "TEXT"),
-                     ("runtime", "JSONB")):
+                     ("runtime", "JSONB"), ("content_hash", "TEXT"),
+                     ("is_duplicate", "BOOLEAN DEFAULT FALSE"),
+                     ("canonical_video_id", "UUID")):
         cx.execute(sql(f"ALTER TABLE videos ADD COLUMN IF NOT EXISTS {col} {typ}"))
+    cx.execute(sql("CREATE INDEX IF NOT EXISTS videos_hash_idx "
+                   "ON videos(content_hash)"))
 
 
 def store(payload: dict, seg_emb, engine) -> None:
@@ -71,18 +114,21 @@ def store(payload: dict, seg_emb, engine) -> None:
         _ensure_schema(cx, dim)
         cx.execute(sql("""
             INSERT INTO videos(video_id, source_path, duration, language,
-                has_speech, tagging_path, audio_features, nlp, stage_timings, runtime)
-            VALUES (:vid,:sp,:dur,:lang,:hs,:tp,:af,:nlp,:st,:rt)
+                has_speech, tagging_path, audio_features, nlp, stage_timings, runtime,
+                content_hash, is_duplicate, canonical_video_id)
+            VALUES (:vid,:sp,:dur,:lang,:hs,:tp,:af,:nlp,:st,:rt,:ch,FALSE,NULL)
             ON CONFLICT (video_id) DO UPDATE SET
                 duration=:dur, language=:lang, has_speech=:hs, tagging_path=:tp,
-                audio_features=:af, nlp=:nlp, stage_timings=:st, runtime=:rt"""),
+                audio_features=:af, nlp=:nlp, stage_timings=:st, runtime=:rt,
+                content_hash=:ch, is_duplicate=FALSE, canonical_video_id=NULL"""),
             {"vid": payload["video_id"], "sp": payload["source_path"],
              "dur": float(payload.get("duration") or 0), "lang": payload.get("language"),
              "hs": payload.get("has_speech"), "tp": payload.get("tagging_path"),
              "af": json.dumps(payload.get("audio_features", {})),
              "nlp": json.dumps(payload.get("nlp", {})),
              "st": json.dumps(payload.get("stage_timings", {})),
-             "rt": json.dumps(payload.get("runtime", {}))})
+             "rt": json.dumps(payload.get("runtime", {})),
+             "ch": payload.get("content_hash")})
         cx.execute(sql("DELETE FROM segments WHERE video_id=:v"),
                    {"v": payload["video_id"]})
         for i, s in enumerate(payload["segments"]):

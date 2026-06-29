@@ -159,7 +159,11 @@ def run_batch(cfg: dict | None = None) -> list[dict]:
             import traceback; traceback.print_exc()
             summary.append({"video": Path(vpath).name, "error": str(e)[:200]})
 
+    dups = [s for s in summary if s.get("status") == "duplicate"]
+    done = [s for s in summary if s.get("segments") is not None]
     log("=== BATCH COMPLETE ===")
+    log(f"   processed: {len(done)} | exact-duplicates skipped: {len(dups)} | "
+        f"total selected: {len(summary)}")
     for s in summary:
         log(f"   {s}")
     return summary

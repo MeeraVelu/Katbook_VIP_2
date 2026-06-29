@@ -17,7 +17,7 @@ from pathlib import Path
 from . import audio, ingest, nlp_stage, segment, tagging
 from .export import write_results_json
 from .router import SILENT, VOICE, decide
-from .storage import store
+from .storage import store, find_canonical_by_hash, store_duplicate
 from .utils import (load_checkpoint, log, save_checkpoint, timer, capture_runtime)
 
 
@@ -40,6 +40,19 @@ def process_one_video(video_path: str, cfg: dict, *, embedder, nlp,
                # provenance of WHERE this ran (Kaggle), captured here so the
                # laptop sync reports the true processing env, not its own.
                "runtime": capture_runtime(cfg)}
+
+    # ---- Stage 0: exact-duplicate gate (file hash, before any GPU work) ----
+    # A byte-identical re-upload is recorded as a reference to its canonical and
+    # skipped entirely. This is the storage/compute saving for re-uploaded videos.
+    P["content_hash"] = ingest.file_sha256(video_path)
+    if engine is not None and cfg.get("DEDUP_BY_HASH", True):
+        canonical = find_canonical_by_hash(engine, P["content_hash"], P["video_id"])
+        if canonical:
+            store_duplicate(engine, P["video_id"], video_path,
+                            P["content_hash"], canonical)
+            log(f"DUPLICATE of {canonical[:8]} — skipped (no processing)")
+            return {"video": Path(video_path).name, "video_id": P["video_id"][:8],
+                    "duplicate_of": canonical[:8], "status": "duplicate"}
 
     # ---- Stage 1: ingest audio + probe duration ----
     with timer(P["stage_timings"], "ingest_audio"):

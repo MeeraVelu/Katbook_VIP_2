@@ -104,3 +104,14 @@ def extract_frames_at(video_path: str, times: list[float], out_dir: Path,
             frames.append({"index": len(frames), "time": round(t, 2),
                            "path": str(path)})
     return frames
+
+
+def file_sha256(path: str, chunk_mb: int = 8) -> str:
+    """Streaming SHA-256 of the raw file bytes. Identifies byte-identical
+    re-uploads cheaply (no decode, no GPU) for exact-duplicate detection."""
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(chunk_mb * 1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()

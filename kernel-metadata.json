@@ -1,6 +1,6 @@
 {
-  "id": "meeravelu/katbook-vip-runner",
-  "title": "Katbook VIP Runner",
+  "id": "meeravelu/kaggle-latest",
+  "title": "Kaggle-latest",
   "code_file": "katbook_vip_kaggle.ipynb",
   "language": "python",
   "kernel_type": "notebook",

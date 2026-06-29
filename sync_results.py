@@ -184,7 +184,7 @@ def build_results(engine) -> list[dict]:
                     "subtopics": llm.get("subtopics", []),
                     "summary": llm.get("summary"),
                     "confidence": llm.get("confidence"),
-                    "dominant_scene": (scenes[0] if scenes else None),
+                    "dominant_scene": (scenes[0] if scenes else None) if v["tagging_path"] == "silent" else None,
                     "objects_detected": objects if v["tagging_path"] == "silent" else [],
                 })
             out.append({

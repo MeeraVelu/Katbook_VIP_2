@@ -68,6 +68,11 @@ BASE = {
     "SILENCE_DB": float(os.environ.get("KVIP_SILENCE_DB", "-50")),
     # Minimum total spoken seconds for the VOICE path; below this -> SILENT path.
     "MIN_SPEECH_SEC": float(os.environ.get("KVIP_MIN_SPEECH_SEC", "3")),
+    # Expensive librosa audio features (rms_energy, silence_ratio, words_per_minute)
+    # are NOT used for routing or tagging — only stored as metadata — so default OFF
+    # for speed at scale. Set KVIP_AUDIO_FEATURES=1 to re-enable. (mean_rms_db,
+    # speech_sec and language_prob are always recorded from the RMS gate + transcript.)
+    "RUN_AUDIO_FEATURES": os.environ.get("KVIP_AUDIO_FEATURES", "0") == "1",
 
     # SEGMENTATION ------------------------------------------------------- #
     "WINDOW_SEC": 30,         # transcript window for embeddings

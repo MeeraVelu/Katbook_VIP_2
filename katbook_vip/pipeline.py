@@ -98,7 +98,7 @@ def process_one_video(video_path: str, cfg: dict, *, embedder, nlp,
     log(f"frames: {len(P['frame_analyses'])} (cap {route.max_frames}, path {route.path})")
 
     # ---- audio features (voice path; cheap) ----
-    if route.path == VOICE and wav_ok:
+    if route.path == VOICE and wav_ok and cfg.get("RUN_AUDIO_FEATURES", False):
         with timer(P["stage_timings"], "audio_features"):
             P["audio_features"].update(
                 audio.audio_features(audio_path, P["duration"],

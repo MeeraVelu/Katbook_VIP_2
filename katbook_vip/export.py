@@ -84,7 +84,10 @@ def build_result(payload: dict) -> dict:
         "subtopics": (s.get("llm") or {}).get("subtopics", []),
         "summary": (s.get("llm") or {}).get("summary"),
         "confidence": (s.get("llm") or {}).get("confidence"),
-        "dominant_scene": _dominant_scene(s, frames),
+        # scenes are evidence only on the silent path; on the voice path CLIP's
+        # guess is unreliable decoration (it mislabeled a lecture as a kitchen),
+        # so don't surface it.
+        "dominant_scene": _dominant_scene(s, frames) if payload.get("tagging_path") == "silent" else None,
         # objects are evidence only on the silent path; on the voice path they are
         # unused and noisy, so don't surface them.
         "objects_detected": s.get("objects", []) if payload.get("tagging_path") == "silent" else [],

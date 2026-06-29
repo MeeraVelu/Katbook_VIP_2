@@ -100,6 +100,24 @@ def run_batch(cfg: dict | None = None) -> list[dict]:
     except Exception:
         device = "cpu"
 
+    # Guard: Kaggle's PyTorch supports CUDA capability sm_70+. The Tesla P100 is
+    # sm_60 and crashes mid-run with "no kernel image is available for execution
+    # on the device" (and 4-bit Qwen needs CUDA, so CPU fallback is not viable).
+    # Fail fast with a clear message instead of crashing 3 minutes into a video.
+    if device == "cuda":
+        try:
+            major, minor = torch.cuda.get_device_capability(0)
+            if major < 7:
+                name = torch.cuda.get_device_name(0)
+                raise RuntimeError(
+                    f"GPU {name} (sm_{major}{minor}) is NOT supported by this PyTorch "
+                    f"(needs sm_70+). On Kaggle, set Settings -> Accelerator -> "
+                    f"GPU T4 x2 (T4 is sm_75). The P100 (sm_60) does not work.")
+        except RuntimeError:
+            raise
+        except Exception:
+            pass
+
     all_videos = discover_videos(cfg)
     log(f"discovered {len(all_videos)} video(s):")
     for i, v in enumerate(all_videos, 1):

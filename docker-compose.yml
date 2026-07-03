@@ -116,6 +116,17 @@ services:
         condition: service_healthy
     logging: *default-logging
 
+  ui:
+    # Static operator console (vanilla HTML/JS via nginx). The browser calls the
+    # API directly; ensure this origin is in CORS_ORIGINS.
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ui
+    restart: unless-stopped
+    ports:
+      - "${UI_PORT:-8080}:80"
+    logging: *default-logging
+
   worker:
     build:
       context: .

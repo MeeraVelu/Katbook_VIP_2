@@ -1,0 +1,11 @@
+# syntax=docker/dockerfile:1
+# ---------------------------------------------------------------------------
+# UI image — static console (vanilla HTML/JS, no build step) served by nginx.
+# The API process itself still loads no UI; this is a separate static container
+# and the browser talks to the API directly over HTTP (CORS-configured).
+# ---------------------------------------------------------------------------
+FROM nginx:1.27-alpine
+COPY ui/ /usr/share/nginx/html/
+EXPOSE 80
+HEALTHCHECK --interval=30s --timeout=4s --retries=3 \
+    CMD wget -qO- http://localhost/ >/dev/null 2>&1 || exit 1

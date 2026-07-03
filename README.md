@@ -28,7 +28,8 @@ katbook_vip/    the pipeline package (settings, router, ingest, audio, visual,
                 nlp, segment, tagging, storage, export, llm_backend, utils)
 alembic/        database migrations (owns the schema)
 scripts/        verify_gpu, smoke, cli, reembed, backup, export_tensorrt, make_test_video
-docker/         Dockerfile.api (slim), Dockerfile.worker (CUDA 12.8), entrypoint, healthcheck
+ui/             static operator console (vanilla HTML/JS, no build) served by nginx
+docker/         Dockerfile.api (slim), Dockerfile.worker (CUDA 12.8), Dockerfile.ui, healthcheck
 tests/          pytest — all pass on CPU with models mocked
 docs/           DEPLOYMENT · API · DATABASE · ARCHITECTURE
 legacy/         the retired Kaggle POC (notebook, kaggle_run, sync/search scripts)
@@ -77,6 +78,15 @@ curl "localhost:8000/api/v1/search?q=time+period+of+a+pendulum&mode=hybrid" -H "
 Or with the operator CLI: `python scripts/cli.py enqueue-folder /data/inbox`,
 `... watch <job_id>`, `... search "..." --mode hybrid`. Full API for the frontend
 team: **[docs/API.md](docs/API.md)**.
+
+### Console UI
+
+A bundled, no-build operator console ships in [`ui/`](ui/README.md) (served by the
+`ui` compose service at **http://localhost:8080**): browse/filter videos, view a
+record + segments, register/upload/batch, watch live job progress, and search
+(semantic/keyword/hybrid). It's a **separate static container** — the API process
+still loads no UI; the browser calls the API over HTTP, so keep this origin in
+`CORS_ORIGINS`. Set the API URL + `X-API-Key` in the console's top bar.
 
 ## Verify without a GPU
 

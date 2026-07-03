@@ -3,8 +3,11 @@
 Base URL: `http://<host>:8000` · Versioned prefix: `/api/v1` · OpenAPI/Swagger:
 `GET /docs` · schema: `GET /openapi.json`.
 
-The backend contains **no UI** — it is a REST API only. Your frontend is an
-independent HTTP client.
+The backend process contains **no UI** — it is a REST API only. A bundled static
+operator console (nginx, no build step) ships separately in [`ui/`](../ui/README.md)
+(compose `ui` service, default http://localhost:8080) and talks to this API purely
+over HTTP; your production frontend is likewise an independent HTTP client. Keep
+each client's origin in `CORS_ORIGINS`.
 
 ## Auth & CORS contract
 

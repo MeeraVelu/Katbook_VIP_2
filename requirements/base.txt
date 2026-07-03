@@ -1,0 +1,10 @@
+# Shared runtime deps used by BOTH the API and the worker (no ML, no GPU).
+# Pinned for reproducibility; bump deliberately.
+pydantic==2.11.7
+pydantic-settings==2.10.1
+SQLAlchemy==2.0.41
+psycopg[binary]==3.2.9
+pgvector==0.4.1
+redis==5.2.1
+celery==5.5.3
+alembic==1.16.2

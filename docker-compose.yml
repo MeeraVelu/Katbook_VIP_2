@@ -1,0 +1,144 @@
+# =============================================================================
+# Katbook VIP — production stack (single RTX 5090 host).
+#
+#   cp .env.example .env   # fill in secrets
+#   docker compose up -d
+#
+# GPU services (worker, vllm) require the NVIDIA Container Toolkit on the host
+# (see docs/DEPLOYMENT.md). The `migrate` one-shot runs Alembic before api/worker.
+# =============================================================================
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-gpu-reservation: &gpu-reservation
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: all
+          capabilities: [gpu]
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging: *default-logging
+
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    command: ["alembic", "upgrade", "head"]
+    env_file: [.env]
+    environment:
+      KVIP_EMBED_DIM: ${KVIP_EMBED_DIM}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    logging: *default-logging
+
+  vllm:
+    image: vllm/vllm-openai:latest
+    restart: unless-stopped
+    # FP8 dynamic quantization on Blackwell. Verify flags against the current
+    # vLLM docs at build time. --gpu-memory-utilization leaves room for the
+    # worker's pipeline models on the shared 5090.
+    command: >
+      --model ${VLLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      --quantization fp8
+      --max-model-len 8192
+      --gpu-memory-utilization 0.45
+    environment:
+      HUGGING_FACE_HUB_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      - model-cache:/root/.cache/huggingface
+    ipc: host
+    deploy: *gpu-reservation
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+    logging: *default-logging
+
+  embeddings:
+    # CPU embedder for SEARCH QUERIES only (keeps the API ML-free). Same model as
+    # the worker so query + segment vectors share a space. OpenAI-compatible at /v1.
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.5
+    restart: unless-stopped
+    command: ["--model-id", "${EMBEDDINGS_MODEL:-BAAI/bge-m3}", "--port", "80"]
+    volumes:
+      - model-cache:/data
+    logging: *default-logging
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    restart: unless-stopped
+    env_file: [.env]
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    logging: *default-logging
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    restart: unless-stopped
+    env_file: [.env]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    volumes:
+      - model-cache:/models
+      - video-inbox:/data/inbox
+      - work:/data/work
+      - results:/data/results
+    deploy: *gpu-reservation
+    logging: *default-logging
+
+volumes:
+  pgdata:
+  redisdata:
+  model-cache:
+  video-inbox:
+  work:
+  results:

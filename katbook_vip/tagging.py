@@ -11,27 +11,34 @@ Production upgrades:
     the "Chemistry video, segment 2 labelled Mathematics" failure.
   * Robust JSON recovery (fences stripped, truncation repaired, regex fallback).
 
-Qwen2.5-7B is loaded in 4-bit ONCE per video, tags all that video's segments,
-then is freed -- one heavy model in VRAM at a time.
+The tagging LLM now runs behind a pluggable backend (:mod:`llm_backend`): vLLM
+over HTTP in production (Qwen2.5-7B FP8), in-process transformers for GPU boxes
+without vLLM, or a deterministic stub for the CPU smoke test. The prompts, the
+strict JSON schema, the robust recovery, and the cross-segment consistency pass
+are UNCHANGED. One malformed output is retried once with a stricter reminder.
 """
+
 from __future__ import annotations
+
 import json
 import re
 from collections import Counter
 
 import numpy as np
 
-from .utils import managed_model, log
+from .llm_backend import get_backend
 from .router import SILENT
+from .utils import log
 
 _SCHEMA = (
-    'Return ONLY valid JSON, no prose, with EXACTLY these keys: '
+    "Return ONLY valid JSON, no prose, with EXACTLY these keys: "
     '{"topic": str, "subtopics": [str], '
     '"content_type": "lecture|tutorial|demo|discussion|animation|rhyme", '
     '"difficulty": "beginner|intermediate|advanced|expert", '
     '"grade_level": str, "subject": str, "summary": str, "tags": [str], '
     '"speaker_role": "teacher|student|narrator|none", "language": str, '
-    '"has_visual_content": bool, "confidence": float}')
+    '"has_visual_content": bool, "confidence": float}'
+)
 
 _DOMAIN = (
     "Katbook is a multilingual K-12 / college EdTech platform; content is often in "
@@ -43,7 +50,8 @@ _DOMAIN = (
     "fits the content (an alphabet / rhyme / simple animation for young children is "
     "Kindergarten or Grade 1-2). The 'topic' must be the SPECIFIC lesson focus "
     "(e.g. 'Balancing Chemical Equations', 'Tamil vowel letters'), never just the "
-    "bare subject name like 'Chemistry' or 'Languages'.")
+    "bare subject name like 'Chemistry' or 'Languages'."
+)
 
 
 def _voice_prompt(seg: dict, language: str) -> str:
@@ -54,7 +62,8 @@ def _voice_prompt(seg: dict, language: str) -> str:
         f'"""{seg["text"][:3000]}"""\n\n'
         f"On-screen text (OCR, may confirm the topic): {seg.get('ocr', '')[:300]}\n"
         f"Weak visual hints (auto-detected, OFTEN WRONG — never make these the subject): "
-        f"scenes={seg.get('scenes', [])}, objects={seg.get('objects', [])}\n\n{_SCHEMA}")
+        f"scenes={seg.get('scenes', [])}, objects={seg.get('objects', [])}\n\n{_SCHEMA}"
+    )
 
 
 def _silent_prompt(seg: dict, language: str) -> str:
@@ -67,7 +76,8 @@ def _silent_prompt(seg: dict, language: str) -> str:
         f"Frame captions (what the visuals depict): {seg.get('captions', [])}\n"
         f"Scene labels: {seg.get('scenes', [])}\n"
         f"Detected objects (only present for real-world footage): {seg.get('objects', [])}\n"
-        f"On-screen language hint: {language}\n\n{_SCHEMA}")
+        f"On-screen language hint: {language}\n\n{_SCHEMA}"
+    )
 
 
 def _parse_llm(raw: str) -> dict:
@@ -78,8 +88,7 @@ def _parse_llm(raw: str) -> dict:
     if not m:
         return {"_parse_error": raw[:300]}
     js = m.group(0)
-    for cand in (js, js + "}", js + '"}', js + '"}}',
-                 js[:js.rfind("}") + 1] if "}" in js else js):
+    for cand in (js, js + "}", js + '"}', js + '"}}', js[: js.rfind("}") + 1] if "}" in js else js):
         try:
             return json.loads(cand)
         except Exception:
@@ -108,11 +117,16 @@ def _parse_llm(raw: str) -> dict:
         return (mm.group(1) == "true") if mm else None
 
     out = {
-        "topic": grab_str("topic"), "subject": grab_str("subject"),
-        "grade_level": grab_str("grade_level"), "difficulty": grab_str("difficulty"),
-        "content_type": grab_str("content_type"), "summary": grab_str("summary"),
-        "speaker_role": grab_str("speaker_role"), "language": grab_str("language"),
-        "tags": grab_list("tags"), "subtopics": grab_list("subtopics"),
+        "topic": grab_str("topic"),
+        "subject": grab_str("subject"),
+        "grade_level": grab_str("grade_level"),
+        "difficulty": grab_str("difficulty"),
+        "content_type": grab_str("content_type"),
+        "summary": grab_str("summary"),
+        "speaker_role": grab_str("speaker_role"),
+        "language": grab_str("language"),
+        "tags": grab_list("tags"),
+        "subtopics": grab_list("subtopics"),
         "confidence": grab_num("confidence"),
         "has_visual_content": grab_bool("has_visual_content"),
         "_recovered": True,  # flag: this came from truncation recovery, not strict parse
@@ -150,13 +164,16 @@ def _finalize_fields(d: dict, is_silent: bool) -> dict:
 def _dominant_value(segments: list[dict], field: str):
     """Video-level value for a per-segment field: the most common one, with ties
     broken by the HIGHEST-CONFIDENCE segment (so a 1-1 split still resolves)."""
-    vals = [(s.get("llm", {}).get(field), float(s.get("llm", {}).get("confidence") or 0))
-            for s in segments if s.get("llm", {}).get(field)]
+    vals = [
+        (s.get("llm", {}).get(field), float(s.get("llm", {}).get("confidence") or 0))
+        for s in segments
+        if s.get("llm", {}).get(field)
+    ]
     if not vals:
         return None
     counts = Counter(v for v, _ in vals)
     top, n = counts.most_common(1)[0]
-    if list(counts.values()).count(n) > 1:        # tie -> highest-confidence segment wins
+    if list(counts.values()).count(n) > 1:  # tie -> highest-confidence segment wins
         top = max(vals, key=lambda x: x[1])[0]
     return top
 
@@ -183,53 +200,62 @@ def _consistency_pass(segments: list[dict]) -> None:
             llm["grade_level"] = dom_grade
 
 
-def tag_segments(payload: dict, route_path: str, cfg: dict, device: str) -> None:
-    """Tag every segment in place (payload['segments'][i]['llm'])."""
-    import torch
-    from transformers import (AutoModelForCausalLM, AutoTokenizer,
-                              BitsAndBytesConfig)
+_SYSTEM = "You are a precise educational video tagging engine."
+_RETRY_HINT = (
+    "\n\nYour previous answer was not valid JSON. Reply with ONLY the "
+    "JSON object, no prose, no markdown fences, all keys present."
+)
 
+
+def tag_segments(payload: dict, route_path: str, cfg: dict, device: str) -> None:
+    """Tag every segment in place (payload['segments'][i]['llm']).
+
+    The model is opened ONCE (loaded for `inprocess`, a client for `vllm`), used
+    for every segment, then released -- preserving the one-model-at-a-time VRAM
+    discipline. A malformed output is retried once with a stricter reminder."""
     language = payload.get("language") or "unknown"
     is_silent = route_path == SILENT
-    with managed_model("Qwen2.5-7B (4-bit)") as keep:
-        bnb = BitsAndBytesConfig(load_in_4bit=True,
-                                 bnb_4bit_compute_dtype=torch.float16,
-                                 bnb_4bit_quant_type="nf4",
-                                 bnb_4bit_use_double_quant=True)
-        tok = keep(AutoTokenizer.from_pretrained(cfg["LLM_MODEL"]))
-        llm = keep(AutoModelForCausalLM.from_pretrained(
-            cfg["LLM_MODEL"], quantization_config=bnb, device_map="auto",
-            torch_dtype=torch.float16))
+    max_new = cfg["LLM_MAX_NEW_TOKENS"]
+
+    with get_backend(cfg, device) as backend:
         for i, seg in enumerate(payload["segments"]):
-            prompt = (_silent_prompt(seg, language) if is_silent
-                      else _voice_prompt(seg, language))
-            text = tok.apply_chat_template(
-                [{"role": "system",
-                  "content": "You are a precise educational video tagging engine."},
-                 {"role": "user", "content": prompt}],
-                tokenize=False, add_generation_prompt=True)
-            inp = tok(text, return_tensors="pt").to(llm.device)
-            with torch.no_grad():
-                out = llm.generate(**inp,
-                                   max_new_tokens=cfg["LLM_MAX_NEW_TOKENS"],
-                                   do_sample=False, pad_token_id=tok.eos_token_id)
-            raw = tok.decode(out[0][inp.input_ids.shape[1]:], skip_special_tokens=True)
-            seg["llm"] = _finalize_fields(_parse_llm(raw), is_silent)
-            log(f"seg {i}: topic={seg['llm'].get('topic')!r} "
+            prompt = _silent_prompt(seg, language) if is_silent else _voice_prompt(seg, language)
+            raw = backend.generate(_SYSTEM, prompt, max_new)
+            parsed = _finalize_fields(_parse_llm(raw), is_silent)
+            if "_parse_error" in parsed:  # one retry with a stricter instruction
+                raw2 = backend.generate(_SYSTEM, prompt + _RETRY_HINT, max_new)
+                retry = _finalize_fields(_parse_llm(raw2), is_silent)
+                if "_parse_error" not in retry:
+                    parsed = retry
+                    parsed["_retried"] = True
+            seg["llm"] = parsed
+            log(
+                f"seg {i}: topic={seg['llm'].get('topic')!r} "
                 f"subject={seg['llm'].get('subject')!r} "
                 f"conf={seg['llm'].get('confidence')}"
-                f"{' [recovered]' if seg['llm'].get('_recovered') else ''}")
+                f"{' [recovered]' if seg['llm'].get('_recovered') else ''}"
+            )
 
     _consistency_pass(payload["segments"])
 
 
 def embed_segments(payload: dict, embedder) -> np.ndarray:
-    """Embed each segment (LLM summary, or transcript/OCR fallback) for search."""
+    """Embed each segment (LLM summary, or transcript/OCR fallback) for search.
+
+    The empty-case width comes from the embedder itself (BGE-M3 = 1024-d in
+    production, MiniLM = 384-d on the T4/smoke profiles), so a video that yields
+    zero segments still returns a correctly-shaped array for the vector column."""
     texts = []
     for s in payload["segments"]:
         llm = s.get("llm", {})
-        texts.append(llm.get("summary") or s.get("text") or s.get("ocr") or
-                     (s.get("captions") or [""])[0] or "untitled segment")
+        texts.append(
+            llm.get("summary")
+            or s.get("text")
+            or s.get("ocr")
+            or (s.get("captions") or [""])[0]
+            or "untitled segment"
+        )
     if not texts:
-        return np.zeros((0, 384))
+        dim = getattr(embedder, "get_sentence_embedding_dimension", lambda: 384)() or 384
+        return np.zeros((0, int(dim)))
     return embedder.encode(texts, normalize_embeddings=True)

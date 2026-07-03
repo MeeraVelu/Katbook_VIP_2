@@ -6,12 +6,14 @@ This is the artifact a human reads: one summary block + one row per segment with
 topic / subject / grade / difficulty / tags / summary / confidence, plus the
 dominant scene and (only-when-meaningful) detected objects.
 """
+
 from __future__ import annotations
+
 import json
 import platform
 import re
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -24,8 +26,7 @@ def _safe_stem(source_path: str, video_id: str) -> str:
 
 
 def _dominant_scene(seg: dict, frames: list[dict]) -> str | None:
-    fr = [f for f in frames
-          if seg["start"] <= f["time"] < seg["end"] and f.get("scene")]
+    fr = [f for f in frames if seg["start"] <= f["time"] < seg["end"] and f.get("scene")]
     if fr:
         return Counter(f["scene"] for f in fr).most_common(1)[0][0]
     return (seg.get("scenes") or [None])[0]
@@ -47,17 +48,19 @@ def video_rollup(seg_rows: list[dict]) -> dict:
     diffs = [s["difficulty"] for s in seg_rows if s.get("difficulty")]
     primary = None
     if seg_rows:
-        primary = max(seg_rows, key=lambda s: (s.get("end", 0) - s.get("start", 0))).get("topic")
+        primary = max(seg_rows, key=lambda s: s.get("end", 0) - s.get("start", 0)).get("topic")
     topics, seen = [], set()
     for s in seg_rows:
         tp = s.get("topic")
         if tp and tp not in seen:
-            seen.add(tp); topics.append(tp)
+            seen.add(tp)
+            topics.append(tp)
     all_tags, seen_t = [], set()
     for s in seg_rows:
         for tg in s.get("tags", []):
             if tg and tg not in seen_t:
-                seen_t.add(tg); all_tags.append(tg)
+                seen_t.add(tg)
+                all_tags.append(tg)
     return {
         "subject": Counter(subjects).most_common(1)[0][0] if subjects else None,
         "grade": Counter(grades).most_common(1)[0][0] if grades else None,
@@ -71,31 +74,38 @@ def video_rollup(seg_rows: list[dict]) -> dict:
 def build_result(payload: dict) -> dict:
     frames = payload.get("frame_analyses", [])
     rt = payload.get("runtime", {}) or {}
-    seg_rows = [{
-        "segment": i,
-        "start": round(float(s["start"]), 1),
-        "end": round(float(s["end"]), 1),
-        "topic": (s.get("llm") or {}).get("topic"),
-        "subject": (s.get("llm") or {}).get("subject"),
-        "grade": (s.get("llm") or {}).get("grade_level"),
-        "difficulty": (s.get("llm") or {}).get("difficulty"),
-        "content_type": (s.get("llm") or {}).get("content_type"),
-        "tags": (s.get("llm") or {}).get("tags", []),
-        "subtopics": (s.get("llm") or {}).get("subtopics", []),
-        "summary": (s.get("llm") or {}).get("summary"),
-        "confidence": (s.get("llm") or {}).get("confidence"),
-        # scenes are evidence only on the silent path; on the voice path CLIP's
-        # guess is unreliable decoration (it mislabeled a lecture as a kitchen),
-        # so don't surface it.
-        "dominant_scene": _dominant_scene(s, frames) if payload.get("tagging_path") == "silent" else None,
-        # objects are evidence only on the silent path; on the voice path they are
-        # unused and noisy, so don't surface them.
-        "objects_detected": s.get("objects", []) if payload.get("tagging_path") == "silent" else [],
-    } for i, s in enumerate(payload["segments"], start=1)]
+    seg_rows = [
+        {
+            "segment": i,
+            "start": round(float(s["start"]), 1),
+            "end": round(float(s["end"]), 1),
+            "topic": (s.get("llm") or {}).get("topic"),
+            "subject": (s.get("llm") or {}).get("subject"),
+            "grade": (s.get("llm") or {}).get("grade_level"),
+            "difficulty": (s.get("llm") or {}).get("difficulty"),
+            "content_type": (s.get("llm") or {}).get("content_type"),
+            "tags": (s.get("llm") or {}).get("tags", []),
+            "subtopics": (s.get("llm") or {}).get("subtopics", []),
+            "summary": (s.get("llm") or {}).get("summary"),
+            "confidence": (s.get("llm") or {}).get("confidence"),
+            # scenes are evidence only on the silent path; on the voice path CLIP's
+            # guess is unreliable decoration (it mislabeled a lecture as a kitchen),
+            # so don't surface it.
+            "dominant_scene": _dominant_scene(s, frames)
+            if payload.get("tagging_path") == "silent"
+            else None,
+            # objects are evidence only on the silent path; on the voice path they are
+            # unused and noisy, so don't surface them.
+            "objects_detected": s.get("objects", [])
+            if payload.get("tagging_path") == "silent"
+            else [],
+        }
+        for i, s in enumerate(payload["segments"], start=1)
+    ]
     return {
         "video_id": payload["video_id"][:8],
         "source": payload["source_path"],
-        "processed_at": datetime.now(timezone.utc).isoformat(),
+        "processed_at": datetime.now(UTC).isoformat(),
         # provenance reflects WHERE it was processed (Kaggle), from payload.runtime,
         # not the machine writing this file.
         "os": rt.get("os") or f"{platform.system()} {platform.release()}",

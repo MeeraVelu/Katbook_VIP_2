@@ -7,24 +7,31 @@ once" requirement. `managed_model()` guarantees a model is freed and the CUDA
 cache cleared the instant a stage finishes -- even if it raises -- so a single
 16 GB T4 never accumulates two big models.
 """
+
 from __future__ import annotations
+
 import gc
 import json
-import sys
 import time
 from contextlib import contextmanager
+from datetime import UTC
 from pathlib import Path
 
-
 # --------------------------------------------------------------------------- #
-# Logging — timestamped, single-line, greppable. No external deps.
+# Logging — delegates to the structured (JSON) logger in logging_config, so every
+# existing `log(...)` call site keeps working but now emits a structured record
+# carrying the bound context (request_id / video_id / stage). No behavior change
+# for callers.
 # --------------------------------------------------------------------------- #
 _T0 = time.time()
 
+_LEVELS = {"DEBUG": 10, "INFO": 20, "WARN": 30, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
+
 
 def log(msg: str, level: str = "INFO") -> None:
-    el = time.time() - _T0
-    print(f"[{el:7.1f}s][{level:5s}] {msg}", flush=True)
+    from .logging_config import get_logger
+
+    get_logger("katbook_vip.pipeline").log(_LEVELS.get(level.upper(), 20), msg)
 
 
 # --------------------------------------------------------------------------- #
@@ -32,6 +39,7 @@ def log(msg: str, level: str = "INFO") -> None:
 # --------------------------------------------------------------------------- #
 def _torch():
     import torch  # noqa: PLC0415
+
     return torch
 
 
@@ -90,8 +98,7 @@ def managed_model(name: str):
     finally:
         free_vram(*registered)
         after = vram_mb()
-        log(f"{name}: freed in {time.time() - t0:5.1f}s "
-            f"(VRAM {before:.0f} -> {after:.0f} MB)")
+        log(f"{name}: freed in {time.time() - t0:5.1f}s (VRAM {before:.0f} -> {after:.0f} MB)")
 
 
 @contextmanager
@@ -163,17 +170,19 @@ def capture_runtime(cfg: dict | None = None) -> dict:
     os/python in a result reflect Kaggle's Linux + Python, not your Windows box.
     """
     import platform
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     rt = {
         "os": f"{platform.system()} {platform.release()}",
         "python": platform.python_version(),
         "gpu": _gpu_name(),
-        "processed_on": datetime.now(timezone.utc).isoformat(),
+        "processed_on": datetime.now(UTC).isoformat(),
     }
     if cfg:
         rt["profile"] = cfg.get("PROFILE")
     try:
         from . import __version__ as _v
+
         rt["package_version"] = _v
     except Exception:
         pass

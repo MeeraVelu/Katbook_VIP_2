@@ -12,6 +12,7 @@ Two paths:
 
 Both honour MIN_SEGMENT_SEC and MAX_SEGMENTS.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -44,12 +45,14 @@ def _split_max_duration(segs: list[dict], max_sec: float, min_sec: float) -> lis
     for s in segs:
         dur = s["end"] - s["start"]
         if dur <= max_sec:
-            out.append(dict(s)); continue
+            out.append(dict(s))
+            continue
         n = int(round(dur / max_sec)) or 1
         # never slice so fine that a part drops below the min-duration floor
         n = min(n, max(1, int(dur // max(min_sec, 1))))
         if n <= 1:
-            out.append(dict(s)); continue
+            out.append(dict(s))
+            continue
         step = dur / n
         for k in range(n):
             a = s["start"] + k * step
@@ -65,21 +68,26 @@ def _cap_segments(segs: list[dict], max_segments: int) -> list[dict]:
         # find shortest segment, merge it into its shorter-duration neighbour
         i = min(range(len(segs)), key=lambda k: segs[k]["end"] - segs[k]["start"])
         if i == 0:
-            segs[0]["end"] = segs[1]["end"]; del segs[1]
+            segs[0]["end"] = segs[1]["end"]
+            del segs[1]
         elif i == len(segs) - 1:
-            segs[-2]["end"] = segs[-1]["end"]; del segs[-1]
+            segs[-2]["end"] = segs[-1]["end"]
+            del segs[-1]
         else:
             left = segs[i - 1]["end"] - segs[i - 1]["start"]
             right = segs[i + 1]["end"] - segs[i + 1]["start"]
             if left <= right:
-                segs[i - 1]["end"] = segs[i]["end"]; del segs[i]
+                segs[i - 1]["end"] = segs[i]["end"]
+                del segs[i]
             else:
-                segs[i]["end"] = segs[i + 1]["end"]; del segs[i + 1]
+                segs[i]["end"] = segs[i + 1]["end"]
+                del segs[i + 1]
     return segs
 
 
-def _ensure_full_coverage(segs: list[dict], duration: float,
-                          max_sec: float = 0, min_sec: float = 0) -> list[dict]:
+def _ensure_full_coverage(
+    segs: list[dict], duration: float, max_sec: float = 0, min_sec: float = 0
+) -> list[dict]:
     """Guarantee segments span the full [0, duration]. The voiced path builds
     segments from transcript windows, so if speech (or Whisper) stops before the
     video ends, the tail would be dropped entirely. Extend the last segment to the
@@ -89,7 +97,7 @@ def _ensure_full_coverage(segs: list[dict], duration: float,
     if not segs or not duration:
         return segs
     last = dict(segs[-1])
-    if last["end"] >= float(duration) - 1.0:   # already covers the video
+    if last["end"] >= float(duration) - 1.0:  # already covers the video
         return segs
     out = [dict(s) for s in segs[:-1]]
     start, end = last["start"], round(float(duration), 2)
@@ -108,32 +116,34 @@ def _ensure_full_coverage(segs: list[dict], duration: float,
     return out
 
 
-def segment_voiced(windows: list[dict], win_emb: np.ndarray, duration: float,
-                   cfg: dict) -> list[dict]:
+def segment_voiced(
+    windows: list[dict], win_emb: np.ndarray, duration: float, cfg: dict
+) -> list[dict]:
     if len(windows) <= 1:
-        return [{"start": 0.0, "end": duration or
-                 (windows[-1]["end"] if windows else 0.0)}]
+        return [{"start": 0.0, "end": duration or (windows[-1]["end"] if windows else 0.0)}]
     sims = [float(np.dot(win_emb[i], win_emb[i + 1])) for i in range(len(win_emb) - 1)]
     drops = [1 - s for s in sims]
     thresh = cfg["SIM_DROP_FALLBACK"]
     try:
         from kneed import KneeLocator
+
         sd = sorted(drops)
         kn = KneeLocator(range(len(sd)), sd, curve="convex", direction="increasing")
         if kn.knee is not None:
             thresh = max(sd[kn.knee], 0.15)
     except Exception:
         pass
-    bounds = sorted(set([0] + [i + 1 for i, d in enumerate(drops) if d >= thresh]
-                        + [len(windows)]))
-    segs = [{"start": windows[a]["start"], "end": windows[b - 1]["end"]}
-            for a, b in zip(bounds[:-1], bounds[1:])]
+    bounds = sorted(set([0] + [i + 1 for i, d in enumerate(drops) if d >= thresh] + [len(windows)]))
+    segs = [
+        {"start": windows[a]["start"], "end": windows[b - 1]["end"]}
+        for a, b in zip(bounds[:-1], bounds[1:], strict=False)
+    ]
     segs = _merge_min_duration(segs, cfg["MIN_SEGMENT_SEC"])
-    segs = _split_max_duration(segs, cfg.get("MAX_SEGMENT_SEC", 0),
-                               cfg["MIN_SEGMENT_SEC"])
+    segs = _split_max_duration(segs, cfg.get("MAX_SEGMENT_SEC", 0), cfg["MIN_SEGMENT_SEC"])
     segs = _cap_segments(segs, cfg["MAX_SEGMENTS"])
-    return _ensure_full_coverage(segs, duration, cfg.get("MAX_SEGMENT_SEC", 0),
-                                 cfg["MIN_SEGMENT_SEC"])
+    return _ensure_full_coverage(
+        segs, duration, cfg.get("MAX_SEGMENT_SEC", 0), cfg["MIN_SEGMENT_SEC"]
+    )
 
 
 def segment_silent(frames: list[dict], duration: float, cfg: dict) -> list[dict]:
@@ -147,19 +157,17 @@ def segment_silent(frames: list[dict], duration: float, cfg: dict) -> list[dict]
             cur = {"start": f["time"], "scene": f.get("scene")}
     segs.append({"start": cur["start"], "end": duration})
     segs = _merge_min_duration(segs, cfg["MIN_SEGMENT_SEC"])
-    segs = _split_max_duration(segs, cfg.get("MAX_SEGMENT_SEC", 0),
-                               cfg["MIN_SEGMENT_SEC"])
+    segs = _split_max_duration(segs, cfg.get("MAX_SEGMENT_SEC", 0), cfg["MIN_SEGMENT_SEC"])
     segs = _cap_segments(segs, cfg["MAX_SEGMENTS"])
-    return _ensure_full_coverage(segs, duration, cfg.get("MAX_SEGMENT_SEC", 0),
-                                 cfg["MIN_SEGMENT_SEC"])
+    return _ensure_full_coverage(
+        segs, duration, cfg.get("MAX_SEGMENT_SEC", 0), cfg["MIN_SEGMENT_SEC"]
+    )
 
 
-def attach_signals(segs: list[dict], transcript: list[dict],
-                   frames: list[dict]) -> list[dict]:
+def attach_signals(segs: list[dict], transcript: list[dict], frames: list[dict]) -> list[dict]:
     """Populate each segment with its transcript text + aggregated visual signals."""
     for s in segs:
-        s["text"] = " ".join(t["text"] for t in transcript
-                             if s["start"] <= t["start"] < s["end"])
+        s["text"] = " ".join(t["text"] for t in transcript if s["start"] <= t["start"] < s["end"])
         sf = [f for f in frames if s["start"] <= f["time"] < s["end"]]
         s["scenes"] = sorted({f["scene"] for f in sf if f.get("scene")})
         s["objects"] = sorted({o for f in sf for o in f.get("objects", [])})

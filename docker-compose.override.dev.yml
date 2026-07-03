@@ -1,0 +1,31 @@
+# =============================================================================
+# Dev override — CPU-only, no GPU, no vLLM. Uses the deterministic `stub` tagger.
+# Compose loads this automatically as `docker-compose.override.yml`? No: name it
+# explicitly:
+#   docker compose -f docker-compose.yml -f docker-compose.override.dev.yml up -d
+#
+# Lets you exercise the API + queue + DB + worker wiring on a laptop without a GPU.
+# =============================================================================
+
+services:
+  # No GPU services in dev.
+  vllm:
+    profiles: ["disabled"]      # not started in dev
+
+  embeddings:
+    profiles: ["disabled"]      # semantic search degrades to keyword in dev
+
+  api:
+    environment:
+      READY_REQUIRES_GPU: "0"
+      EMBEDDINGS_URL: ""        # force keyword fallback
+
+  worker:
+    # rebuild against the CPU stack would be heavy; for dev we run the smoke-style
+    # stub tagger and drop the GPU reservation so it schedules on CPU.
+    deploy: {}
+    environment:
+      KVIP_PROFILE: smoke
+      KVIP_TAGGING_BACKEND: stub
+      KVIP_FFMPEG_HWACCEL: none
+      WORKER_CONCURRENCY: "1"

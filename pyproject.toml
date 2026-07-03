@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "katbook-vip"
+version = "3.0.0"
+description = "Katbook Video Intelligence Platform — production, API-first video-tagging pipeline"
+requires-python = ">=3.11"
+readme = "README.md"
+# Core deps needed to import the pipeline + API + worker glue (no GPU/ML libs;
+# those are installed from requirements/worker.txt in the worker image).
+dependencies = [
+    "pydantic>=2.11",
+    "pydantic-settings>=2.10",
+    "SQLAlchemy>=2.0",
+    "psycopg[binary]>=3.2",
+    "pgvector>=0.4",
+    "redis>=5.2",
+    "celery>=5.5",
+    "alembic>=1.16",
+    "fastapi>=0.116",
+    "uvicorn[standard]>=0.35",
+    "python-multipart>=0.0.20",
+    "httpx>=0.28",
+    "openai>=1.99",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.4", "pytest-cov>=6.2", "ruff>=0.12", "mypy>=1.16", "typer>=0.16"]
+
+[project.scripts]
+katbook = "scripts.cli:app"
+
+[tool.setuptools]
+packages = ["katbook_vip", "app", "app.routers", "app.schemas", "app.services", "worker"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [".venv", "legacy", "alembic/versions", "results", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "W", "C4"]
+# E501 (line length) is handled by the formatter; long descriptive comments/docstrings
+# in the pipeline are intentional. B008 clashes with FastAPI's Depends() default idiom.
+ignore = ["E501", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/*" = ["B011", "C408"]     # dict() fixtures read clearly in tests
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.11"
+files = ["app"]
+ignore_missing_imports = true
+warn_unused_ignores = false
+disallow_untyped_defs = false
+check_untyped_defs = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]
+markers = [
+    "integration: tests that need a live Postgres (skipped when DATABASE_URL is unset)",
+]

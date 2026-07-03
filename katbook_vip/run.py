@@ -10,12 +10,15 @@ or from the command line:
 
     python -m katbook_vip --process all --profile fast
 """
+
 from __future__ import annotations
+
 import glob
 import uuid
 from pathlib import Path
 
 from .config import load_config
+from .logging_config import configure_logging
 from .pipeline import process_one_video
 from .storage import existing_video_ids, make_engine, normalize_db_url
 from .utils import gpu_banner, log
@@ -46,18 +49,22 @@ def select_videos(cfg: dict, all_videos: list[str]) -> list[str]:
 
     # MULTI-SELECT: a list, or a comma-separated string -> resolve each item, dedupe.
     if isinstance(raw, (list, tuple)) or (isinstance(raw, str) and "," in raw):
-        items = (list(raw) if isinstance(raw, (list, tuple))
-                 else [x.strip() for x in raw.split(",") if x.strip()])
+        items = (
+            list(raw)
+            if isinstance(raw, (list, tuple))
+            else [x.strip() for x in raw.split(",") if x.strip()]
+        )
         chosen, seen = [], set()
         for it in items:
             for v in select_videos({**cfg, "PROCESS": it}, all_videos):
                 if v not in seen:
-                    seen.add(v); chosen.append(v)
+                    seen.add(v)
+                    chosen.append(v)
         return chosen
 
     if isinstance(raw, int) or (isinstance(raw, str) and raw.strip().isdigit()):
         k = int(raw)
-        chosen = all_videos[k - 1:k] if 1 <= k <= len(all_videos) else []
+        chosen = all_videos[k - 1 : k] if 1 <= k <= len(all_videos) else []
         if not chosen:
             log(f"PROCESS={raw} out of range (1..{len(all_videos)}); nothing selected", "WARN")
         return chosen
@@ -71,31 +78,37 @@ def select_videos(cfg: dict, all_videos: list[str]) -> list[str]:
     if not chosen:
         log(f"PROCESS={raw!r} matched no video; set it to a number from the list", "WARN")
     elif len(chosen) > 1:
-        log(f"{raw!r} matched {len(chosen)} videos -> processing all "
-            f"(use a NUMBER to pick one)", "WARN")
+        log(
+            f"{raw!r} matched {len(chosen)} videos -> processing all (use a NUMBER to pick one)",
+            "WARN",
+        )
     return chosen
 
 
 def _load_shared_models(cfg: dict, device: str):
-    from sentence_transformers import SentenceTransformer
     import spacy
-    log("loading shared embedder (MiniLM) + spaCy once for the whole batch")
+    from sentence_transformers import SentenceTransformer
+
+    log(f"loading shared embedder ({cfg['EMBED_MODEL']}) + spaCy once for the batch")
     embedder = SentenceTransformer(cfg["EMBED_MODEL"], device=device)
     try:
         nlp = spacy.load("en_core_web_sm")
     except Exception:
-        import subprocess, sys
-        subprocess.run([sys.executable, "-m", "spacy", "download",
-                        "en_core_web_sm"], check=False)
+        import subprocess
+        import sys
+
+        subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_sm"], check=False)
         nlp = spacy.load("en_core_web_sm")
     return embedder, nlp
 
 
 def run_batch(cfg: dict | None = None) -> list[dict]:
+    configure_logging()
     cfg = cfg or load_config()
     log(gpu_banner())
     try:
         import torch
+
         device = "cuda" if torch.cuda.is_available() else "cpu"
     except Exception:
         device = "cpu"
@@ -112,7 +125,8 @@ def run_batch(cfg: dict | None = None) -> list[dict]:
                 raise RuntimeError(
                     f"GPU {name} (sm_{major}{minor}) is NOT supported by this PyTorch "
                     f"(needs sm_70+). On Kaggle, set Settings -> Accelerator -> "
-                    f"GPU T4 x2 (T4 is sm_75). The P100 (sm_60) does not work.")
+                    f"GPU T4 x2 (T4 is sm_75). The P100 (sm_60) does not work."
+                )
         except RuntimeError:
             raise
         except Exception:
@@ -136,13 +150,14 @@ def run_batch(cfg: dict | None = None) -> list[dict]:
     else:
         log("no DATABASE_URL -> results saved to JSON only (not Postgres)", "WARN")
 
-    skip = (existing_video_ids(engine)
-            if engine and cfg.get("SKIP_EXISTING") else set())
+    skip = existing_video_ids(engine) if engine and cfg.get("SKIP_EXISTING") else set()
 
     embedder, nlp = _load_shared_models(cfg, device)
 
-    log(f"=== BATCH (PROCESS={cfg.get('PROCESS')!r}, PROFILE={cfg['PROFILE']}): "
-        f"{len(selected)} of {len(all_videos)} video(s) ===")
+    log(
+        f"=== BATCH (PROCESS={cfg.get('PROCESS')!r}, PROFILE={cfg['PROFILE']}): "
+        f"{len(selected)} of {len(all_videos)} video(s) ==="
+    )
     summary = []
     for n, vpath in enumerate(selected, 1):
         vid = str(uuid.uuid5(uuid.NAMESPACE_URL, vpath))
@@ -152,18 +167,25 @@ def run_batch(cfg: dict | None = None) -> list[dict]:
             continue
         log(f"[{n}/{len(selected)}] >>> {Path(vpath).name}")
         try:
-            summary.append(process_one_video(vpath, cfg, embedder=embedder,
-                                             nlp=nlp, engine=engine, device=device))
+            summary.append(
+                process_one_video(
+                    vpath, cfg, embedder=embedder, nlp=nlp, engine=engine, device=device
+                )
+            )
         except Exception as e:
             log(f"FAILED {Path(vpath).name}: {e}", "ERROR")
-            import traceback; traceback.print_exc()
+            import traceback
+
+            traceback.print_exc()
             summary.append({"video": Path(vpath).name, "error": str(e)[:200]})
 
     dups = [s for s in summary if s.get("status") == "duplicate"]
     done = [s for s in summary if s.get("segments") is not None]
     log("=== BATCH COMPLETE ===")
-    log(f"   processed: {len(done)} | exact-duplicates skipped: {len(dups)} | "
-        f"total selected: {len(summary)}")
+    log(
+        f"   processed: {len(done)} | exact-duplicates skipped: {len(dups)} | "
+        f"total selected: {len(summary)}"
+    )
     for s in summary:
         log(f"   {s}")
     return summary
@@ -171,6 +193,7 @@ def run_batch(cfg: dict | None = None) -> list[dict]:
 
 def main() -> None:
     import argparse
+
     ap = argparse.ArgumentParser(description="Katbook VIP pipeline")
     ap.add_argument("--process", default=None, help="all | first | N | substring")
     ap.add_argument("--profile", default=None, choices=["fast", "balanced", "quality"])

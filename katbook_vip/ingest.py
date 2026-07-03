@@ -12,7 +12,9 @@ are the reliable backbone; cuts are bonus detail when present.
 
 CPU-only stage; no GPU, no model. Fully testable locally.
 """
+
 from __future__ import annotations
+
 import re
 import subprocess
 from pathlib import Path
@@ -24,9 +26,49 @@ def _run(cmd: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True)
 
 
+# --------------------------------------------------------------------------- #
+# NVDEC GPU decode. Production decodes frames on the GPU (-hwaccel cuda) for a
+# big I/O win on the 95k backlog; if the ffmpeg build or GPU lacks CUDA decode we
+# fall back to CPU decode automatically. Availability is probed once and cached.
+# --------------------------------------------------------------------------- #
+_HWACCEL_OK: bool | None = None
+
+
+def cuda_decode_available() -> bool:
+    """True if this ffmpeg build advertises the 'cuda' hwaccel. Probed once."""
+    global _HWACCEL_OK
+    if _HWACCEL_OK is None:
+        try:
+            cp = _run(["ffmpeg", "-hide_banner", "-hwaccels"])
+            _HWACCEL_OK = "cuda" in (cp.stdout + cp.stderr).lower()
+        except Exception:
+            _HWACCEL_OK = False
+    return _HWACCEL_OK
+
+
+def _hwaccel_prefix(mode: str) -> list[str]:
+    """Resolve FFMPEG_HWACCEL ('auto'|'cuda'|'none') to ffmpeg input flags."""
+    mode = (mode or "none").lower()
+    if mode == "none":
+        return []
+    if mode == "cuda" or (mode == "auto" and cuda_decode_available()):
+        return ["-hwaccel", "cuda"]
+    return []
+
+
 def probe_duration(video_path: str) -> float:
-    cp = _run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
-               "-of", "default=nw=1:nk=1", video_path])
+    cp = _run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=nw=1:nk=1",
+            video_path,
+        ]
+    )
     try:
         return float(cp.stdout.strip())
     except Exception:
@@ -34,9 +76,20 @@ def probe_duration(video_path: str) -> float:
 
 
 def has_audio_stream(video_path: str) -> bool:
-    cp = _run(["ffprobe", "-v", "error", "-select_streams", "a",
-               "-show_entries", "stream=codec_name", "-of", "default=nw=1:nk=1",
-               video_path])
+    cp = _run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "a",
+            "-show_entries",
+            "stream=codec_name",
+            "-of",
+            "default=nw=1:nk=1",
+            video_path,
+        ]
+    )
     return bool(cp.stdout.strip())
 
 
@@ -45,21 +98,53 @@ def extract_audio(video_path: str, out_wav: Path) -> bool:
     if not has_audio_stream(video_path):
         log("no audio stream present -> silent video", "WARN")
         return False
-    _run(["ffmpeg", "-y", "-i", video_path, "-ac", "1", "-ar", "16000",
-          "-vn", "-f", "wav", str(out_wav), "-loglevel", "error"])
+    _run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            video_path,
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            "-vn",
+            "-f",
+            "wav",
+            str(out_wav),
+            "-loglevel",
+            "error",
+        ]
+    )
     return out_wav.exists()
 
 
 def _scene_cut_times(video_path: str, threshold: float) -> list[float]:
     """Timestamps of hard visual changes via ffmpeg's scene score (one pass)."""
-    cp = _run(["ffmpeg", "-i", video_path, "-vf",
-               f"select='gt(scene,{threshold})',showinfo", "-f", "null", "-"])
+    cp = _run(
+        [
+            "ffmpeg",
+            "-i",
+            video_path,
+            "-vf",
+            f"select='gt(scene,{threshold})',showinfo",
+            "-f",
+            "null",
+            "-",
+        ]
+    )
     return [float(m) for m in re.findall(r"pts_time:([0-9.]+)", cp.stderr)]
 
 
-def plan_frame_times(video_path: str, duration: float, *, max_frames: int,
-                     use_scene_cuts: bool, scene_threshold: float = 0.3,
-                     min_per_30s: float = 1.0) -> list[float]:
+def plan_frame_times(
+    video_path: str,
+    duration: float,
+    *,
+    max_frames: int,
+    use_scene_cuts: bool,
+    scene_threshold: float = 0.3,
+    min_per_30s: float = 1.0,
+) -> list[float]:
     """
     Decide WHICH timestamps to grab. Uniform anchors guarantee coverage;
     scene cuts add detail where the video actually changes. Result is capped
@@ -83,33 +168,82 @@ def plan_frame_times(video_path: str, duration: float, *, max_frames: int,
     return ordered or [0.0]
 
 
-def extract_frames_at(video_path: str, times: list[float], out_dir: Path,
-                      scale_w: int = 224) -> list[dict]:
+def extract_frames_at(
+    video_path: str, times: list[float], out_dir: Path, scale_w: int = 224, hwaccel: str = "none"
+) -> list[dict]:
     """
     Extract one JPEG per requested timestamp with fast seek. Downscaled to
     scale_w px wide (plenty for CLIP/YOLO/OCR, much faster I/O).
     Returns [{"index","time","path"}], skipping any frame ffmpeg couldn't grab.
+
+    ``hwaccel`` ('auto'|'cuda'|'none') requests NVDEC GPU decode in production;
+    if a GPU-decoded grab fails, we automatically retry that frame on CPU so a
+    quirky codec never silently drops frames.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     for f in out_dir.glob("frame_*.jpg"):
         f.unlink()  # clear the previous video's frames
+    hw = _hwaccel_prefix(hwaccel)
     frames = []
     for i, t in enumerate(times):
         path = out_dir / f"frame_{i:04d}.jpg"
-        # -ss before -i = fast (keyframe) seek; -frames:v 1 = single frame
-        _run(["ffmpeg", "-y", "-ss", f"{t:.2f}", "-i", video_path,
-              "-frames:v", "1", "-vf", f"scale={scale_w}:-1",
-              str(path), "-loglevel", "error"])
+        # -ss before -i = fast (keyframe) seek; -frames:v 1 = single frame.
+        # NVDEC decodes on-GPU; -vf scale (CPU) still works because the frame is
+        # downloaded before the filter. Fall back to CPU decode on failure.
+        _run(
+            [
+                "ffmpeg",
+                "-y",
+                *hw,
+                "-ss",
+                f"{t:.2f}",
+                "-i",
+                video_path,
+                "-frames:v",
+                "1",
+                "-vf",
+                f"scale={scale_w}:-1",
+                str(path),
+                "-loglevel",
+                "error",
+            ]
+        )
+        if hw and not (path.exists() and path.stat().st_size > 0):
+            _run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-ss",
+                    f"{t:.2f}",
+                    "-i",
+                    video_path,
+                    "-frames:v",
+                    "1",
+                    "-vf",
+                    f"scale={scale_w}:-1",
+                    str(path),
+                    "-loglevel",
+                    "error",
+                ]
+            )
         if path.exists() and path.stat().st_size > 0:
-            frames.append({"index": len(frames), "time": round(t, 2),
-                           "path": str(path)})
+            frames.append({"index": len(frames), "time": round(t, 2), "path": str(path)})
     return frames
+
+
+def file_size_bytes(path: str) -> int:
+    """Size of the raw file in bytes (cheap dedup pre-filter + stored metadata)."""
+    try:
+        return Path(path).stat().st_size
+    except Exception:
+        return 0
 
 
 def file_sha256(path: str, chunk_mb: int = 8) -> str:
     """Streaming SHA-256 of the raw file bytes. Identifies byte-identical
     re-uploads cheaply (no decode, no GPU) for exact-duplicate detection."""
     import hashlib
+
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(chunk_mb * 1024 * 1024), b""):

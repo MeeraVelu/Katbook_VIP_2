@@ -1,0 +1,63 @@
+# syntax=docker/dockerfile:1
+# ---------------------------------------------------------------------------
+# Worker image — CUDA 12.8 (Blackwell / RTX 5090 sm_120), cu128 torch wheels.
+#
+# VERIFY AT BUILD TIME (see DEPLOYMENT.md): the exact torch/torchvision cu128
+# versions and the CUDA base tag move fast. If the pinned wheel below lacks
+# sm_120, switch to the cu128 *nightly* index (documented) — `verify_gpu.py` is
+# the gate that proves the stack actually runs on the card.
+# ---------------------------------------------------------------------------
+FROM nvidia/cuda:12.8.1-runtime-ubuntu24.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    HF_HOME=/models \
+    KVIP_LOG_FORMAT=json
+
+# System deps: python 3.12 (ubuntu 24.04 default), ffmpeg (NVDEC-capable),
+# and the shared libs OpenCV/EasyOCR/Ultralytics need at runtime.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-pip python3-venv \
+        ffmpeg libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --upgrade pip
+
+# 1) torch/torchvision FIRST from the CUDA 12.8 index (Blackwell needs cu128).
+RUN pip install --index-url https://download.pytorch.org/whl/cu128 \
+        "torch==2.9.1" "torchvision==0.24.1"
+
+# 2) the rest of the pipeline stack (torch already satisfied).
+COPY requirements/ requirements/
+RUN pip install -r requirements/worker.txt
+
+# 3) spaCy English model (used by the NLP stage) baked into the image.
+RUN python -m spacy download en_core_web_sm
+
+# Non-root user; model cache + data dirs owned by it.
+RUN groupadd --gid 10001 katbook \
+    && useradd --uid 10001 --gid katbook --create-home katbook \
+    && mkdir -p /models /data/work /data/inbox /data/results \
+    && chown -R katbook:katbook /models /data
+
+WORKDIR /app
+COPY katbook_vip/ katbook_vip/
+COPY app/ app/
+COPY worker/ worker/
+COPY scripts/ scripts/
+COPY docker/ docker/
+COPY pyproject.toml README.md ./
+RUN chown -R katbook:katbook /app
+
+USER katbook
+
+# Liveness: the worker refreshes a Redis heartbeat every HEARTBEAT_INTERVAL s.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
+    CMD python docker/healthcheck.py || exit 1
+
+ENTRYPOINT ["bash", "docker/entrypoint-worker.sh"]

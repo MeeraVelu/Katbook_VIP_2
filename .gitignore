@@ -13,11 +13,20 @@ __pycache__/
 *.egg-info/
 build/
 dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
 
 # generated artifacts (rebuilt from Postgres on demand)
 results/
 checkpoints/
 payload.json
+
+# local data / caches (mounted volumes in compose)
+backups/
+test_data/
+data/
+models/
 
 # debug: downloaded kaggle kernel output
 _kaggle_out/

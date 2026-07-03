@@ -1,62 +1,105 @@
 # Katbook Video Intelligence Platform (VIP)
 
 Turns lecture / animation videos into **per-segment structured tags** — topic,
-subject, grade level, difficulty, tags, summary, plus a vector embedding — and
-stores them in Postgres so you can search your whole video library by *meaning*
-or by keyword.
+subject, grade level, difficulty, tags, summary, plus a 1024-d vector embedding —
+stored in Postgres so you can search a whole video library by **meaning** or by
+**keyword**. Handles **narrated and silent** videos in **any language**.
 
-Built to run on a **free Kaggle T4 GPU**, loading **one model into VRAM at a
-time**, and to handle **both narrated and silent videos in any language**.
-
-```
-video → voice/silent router → transcribe (any lang) → adaptive frames
-      → CLIP scenes + gated YOLO/OCR + BLIP-2 captions → segment
-      → Qwen tags each segment → Postgres (+ results/*.json)
-```
-
-## Repo layout
+This is the **production** system: an API-first, Dockerized service stack for a
+dedicated **NVIDIA RTX 5090 (32 GB, Blackwell)** server. The original free-Kaggle
+POC lives in [`legacy/`](legacy/README.md).
 
 ```
-katbook_vip/            the importable pipeline package (edit this in VS Code)
-  config.py             one CONFIG dict + fast/balanced/quality profiles
-  run.py                discover videos, select, run the batch  (entry point)
-  pipeline.py           process ONE video end-to-end, with per-stage timing
-  router.py             decide VOICE vs SILENT path
-  ingest.py             ffmpeg: duration, audio extract, adaptive frame plan
-  audio.py              speech detection (RMS gate) + Whisper transcription
-  visual.py             CLIP scenes, gated YOLO, gated OCR, BLIP-2 captions
-  nlp_stage.py          spaCy NER + KeyBERT keyphrases + embeddings
-  segment.py            voiced (cosine-drop) & silent (scene-group) segmentation
-  tagging.py            Qwen per-segment tags + cross-segment consistency pass
-  storage.py            idempotent upsert into Postgres (pgvector + FTS)
-  export.py             write the clean results/<name>.json
-  utils.py              managed_model() — guarantees one-model-at-a-time + VRAM free
+frontend ──HTTP──> api (FastAPI, no ML) ──> redis queue ──> worker (Celery, GPU)
+                        │                                        │
+                        ├── postgres 16 + pgvector <────────────┤ (upsert + job status)
+                        └── search (semantic/keyword/hybrid)     └── vllm (Qwen2.5-7B FP8 tagging)
 
-katbook_vip_kaggle.ipynb   thin runner: install → clone package → set CONFIG → run
-sync_results.py            LAPTOP: mirror Postgres results into ./results (--watch)
-search.py                  LAPTOP: semantic + keyword search over the DB
-requirements-local.txt     laptop-only deps (no GPU/ML) for the two scripts above
-docs/ARCHITECTURE.md       how/why the pipeline is built the way it is
-docs/OPERATIONS.md         run it on Kaggle, sync locally, troubleshoot
+pipeline per video: voice/silent router → transcribe (any lang) → adaptive frames
+   → CLIP scenes + gated YOLO/OCR + BLIP-2 captions → segment → LLM tags → Postgres
 ```
 
-## Quick start
+## What's here
 
-**On Kaggle (processing):**
-1. New Notebook → Settings → Accelerator → **GPU T4 x2**.
-2. Add Secrets: `DATABASE_URL` (your Neon/Supabase URL, required to store),
-   `HF_TOKEN` (optional).
-3. Add your videos as a Kaggle **Dataset** (any folder of `.mp4`).
-4. Open `katbook_vip_kaggle.ipynb`, set `REPO_URL` to your repo, edit `CONFIG`
-   (profile + which videos), **Run All**.
+```
+app/            FastAPI service — routers, schemas, services, deps (NO ML, NO UI)
+worker/         Celery worker — runs the GPU pipeline, one video per task
+katbook_vip/    the pipeline package (settings, router, ingest, audio, visual,
+                nlp, segment, tagging, storage, export, llm_backend, utils)
+alembic/        database migrations (owns the schema)
+scripts/        verify_gpu, smoke, cli, reembed, backup, export_tensorrt, make_test_video
+docker/         Dockerfile.api (slim), Dockerfile.worker (CUDA 12.8), entrypoint, healthcheck
+tests/          pytest — all pass on CPU with models mocked
+docs/           DEPLOYMENT · API · DATABASE · ARCHITECTURE
+legacy/         the retired Kaggle POC (notebook, kaggle_run, sync/search scripts)
+docker-compose.yml + docker-compose.override.dev.yml
+requirements/   base · api · worker (cu128) · dev · local
+```
 
-**On your laptop (reading results):**
+## Deploy (the short version)
+
+Full runbook: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**. On the GPU box:
+
 ```bash
-pip install -r requirements-local.txt
-set DATABASE_URL=postgresql://user:pass@host/db      # or put it in db_url.txt
-python sync_results.py --watch                        # results/ fills in by itself
-python search.py "time period of a pendulum"
+# 0) prove the GPU stack works FIRST (catches "old CUDA on Blackwell")
+pip install torch --index-url https://download.pytorch.org/whl/cu128
+python scripts/verify_gpu.py            # expect RESULT: PASS
+
+# 1) configure secrets
+cp .env.example .env                    # set POSTGRES_PASSWORD, API_KEY, CORS_ORIGINS
+
+# 2) build + start (migrate runs Alembic before api/worker)
+docker compose up -d
+curl -s localhost:8000/ready            # ready:true when DB+Redis+worker GPU are good
 ```
 
-See **docs/OPERATIONS.md** for the full runbook and **docs/ARCHITECTURE.md** for
-the design (voice/silent routing, the speed wins, one-model-at-a-time).
+**The single command your GPU box runs to bring the whole system up:**
+
+```bash
+docker compose up -d --build
+```
+
+## Use it
+
+```bash
+# register a video (dedup pre-check runs before enqueue)
+curl -X POST localhost:8000/api/v1/videos -H "X-API-Key: $API_KEY" \
+  -H 'Content-Type: application/json' -d '{"source_path":"/data/inbox/lesson.mp4"}'
+
+# enqueue the whole backlog
+curl -X POST localhost:8000/api/v1/videos/batch -H "X-API-Key: $API_KEY" \
+  -H 'Content-Type: application/json' -d '{"folder":"/data/inbox"}'
+
+# search
+curl "localhost:8000/api/v1/search?q=time+period+of+a+pendulum&mode=hybrid" -H "X-API-Key: $API_KEY"
+```
+
+Or with the operator CLI: `python scripts/cli.py enqueue-folder /data/inbox`,
+`... watch <job_id>`, `... search "..." --mode hybrid`. Full API for the frontend
+team: **[docs/API.md](docs/API.md)**.
+
+## Verify without a GPU
+
+Everything is verifiable on CPU:
+
+```bash
+pip install -r requirements/dev.txt
+make lint          # ruff
+make test          # pytest — all green on CPU, models mocked
+make smoke         # full pipeline on a generated 10s clip (tiny models, stub tagger, no DB)
+docker compose config    # compose is valid
+```
+
+## Preserved safety rules
+
+- **Only byte-identical (SHA-256) files are deduplicated** — recorded as a
+  reference to their canonical, never reprocessed. Same-topic/different-content
+  videos are **never** auto-merged.
+- **Deletes are soft** (status flag) — content and segments are retained.
+- **Idempotent**: `video_id = uuid5(source_path)`; re-runs UPSERT.
+
+## Profiles
+
+`KVIP_PROFILE` = `production` (RTX 5090: large-v3 / ViT-L-14 / YOLO11x / BGE-M3 /
+Qwen-FP8-vLLM) · `fast`/`balanced`/`quality` (T4-class) · `smoke` (tiny CPU models
++ stub tagger, for the smoke test/CI). See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

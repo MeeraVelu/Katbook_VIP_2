@@ -7,17 +7,16 @@ so this stage adds almost no per-video cost. KeyBERT can break on certain
 sentence-transformers versions, so a dependency-light spaCy noun-chunk extractor
 is the fallback.
 """
+
 from __future__ import annotations
+
 from collections import Counter
 
 import numpy as np
 
-from .utils import free_vram
-
 
 def _fallback_keywords(doc, top_n: int = 20):
-    chunks = [c.text.lower().strip() for c in doc.noun_chunks
-              if 2 <= len(c.text.strip()) <= 40]
+    chunks = [c.text.lower().strip() for c in doc.noun_chunks if 2 <= len(c.text.strip()) <= 40]
     cnt = Counter(chunks)
     n = sum(cnt.values()) or 1
     return [(t, round(c / n, 3)) for t, c in cnt.most_common(top_n)]
@@ -28,15 +27,19 @@ def enrich(full_text: str, embedder, nlp) -> dict:
     if not full_text.strip():
         return {"entities": [], "keywords": []}
     doc = nlp(full_text[:100000])
-    entities = sorted(set((e.text, e.label_) for e in doc.ents))[:40]
+    entities = sorted({(e.text, e.label_) for e in doc.ents})[:40]
     try:
         from keybert import KeyBERT
+
         kws = KeyBERT(model=embedder).extract_keywords(
-            full_text, keyphrase_ngram_range=(1, 2), stop_words="english", top_n=20)
+            full_text, keyphrase_ngram_range=(1, 2), stop_words="english", top_n=20
+        )
     except Exception:
         kws = _fallback_keywords(doc)
-    return {"entities": [{"text": t, "label": l} for t, l in entities],
-            "keywords": [{"term": k, "score": round(float(s), 3)} for k, s in kws]}
+    return {
+        "entities": [{"text": t, "label": lab} for t, lab in entities],
+        "keywords": [{"term": k, "score": round(float(s), 3)} for k, s in kws],
+    }
 
 
 def build_windows(transcript: list[dict], win: int) -> list[dict]:
@@ -53,5 +56,6 @@ def build_windows(transcript: list[dict], win: int) -> list[dict]:
 
 def embed_windows(windows: list[dict], embedder) -> np.ndarray:
     if not windows:
-        return np.zeros((0, 384))
+        dim = getattr(embedder, "get_sentence_embedding_dimension", lambda: 384)() or 384
+        return np.zeros((0, int(dim)))
     return embedder.encode([w["text"] for w in windows], normalize_embeddings=True)

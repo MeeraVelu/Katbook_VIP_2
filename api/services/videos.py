@@ -218,19 +218,20 @@ def _list_query(
     q = select(Video)
     if not include_deleted:
         q = q.where(Video.status != "soft_deleted")
-    if status:
+    if status:  # status is a fixed enum from the dropdown — exact match
         q = q.where(Video.status == status)
-    if language:
-        q = q.where(Video.language == language)
+    if language:  # forgiving: case-insensitive substring ("ta" matches "Tamil")
+        q = q.where(Video.language.ilike(f"%{language}%"))
     if has_speech is not None:
         q = q.where(Video.has_speech == has_speech)
     if subject or grade_level:
-        # subject/grade live on segments — restrict to videos having a matching one
+        # subject/grade live on segments — restrict to videos having a matching one.
+        # Filters are case-insensitive partial matches so "phys" finds "Physics".
         sub = select(Segment.video_id)
         if subject:
-            sub = sub.where(Segment.subject == subject)
+            sub = sub.where(Segment.subject.ilike(f"%{subject}%"))
         if grade_level:
-            sub = sub.where(Segment.grade_level == grade_level)
+            sub = sub.where(Segment.grade_level.ilike(f"%{grade_level}%"))
         q = q.where(Video.video_id.in_(sub))
     return q
 

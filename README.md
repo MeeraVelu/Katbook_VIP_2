@@ -51,20 +51,36 @@ Full runbook: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**. On the GPU box:
 # 0) prove the GPU stack works FIRST (catches "old CUDA on Blackwell")
 pip install torch --index-url https://download.pytorch.org/whl/cu128
 python scripts/verify_gpu.py            # expect RESULT: PASS
-
-# 1) configure secrets
-cp .env.example .env                    # set POSTGRES_PASSWORD, API_KEY, CORS_ORIGINS
-
-# 2) build + start (migrate runs Alembic before api/worker)
-docker compose up -d
-curl -s localhost:8000/ready            # ready:true when DB+Redis+worker GPU are good
 ```
 
-**The single command your GPU box runs to bring the whole system up:**
+Then pick where the **database** runs — the app is identical either way, it just
+reads `DATABASE_URL`/`REDIS_URL`. Postgres, Redis, and `migrate` are bundled behind
+the **`infra`** compose profile, so a plain `up` skips them for an external DB.
 
 ```bash
-docker compose up -d --build
+# ── Path A · self-contained (bundled Postgres+Redis in Docker) — eval/testing ──
+cp .env.example .env                     # set POSTGRES_PASSWORD, API_KEY, CORS_ORIGINS
+docker compose --profile infra up -d     # migrate runs Alembic before api/worker
+
+# ── Path B · external DB (native Postgres 16 + pgvector, or cloud) — production ─
+#   sudo apt install postgresql-16 postgresql-16-pgvector redis-server
+#   sudo -u postgres createuser katbook -P && sudo -u postgres createdb katbook_vip -O katbook
+#   psql -U katbook -d katbook_vip -c "CREATE EXTENSION vector;" && alembic upgrade head
+cp .env.production .env                   # set the real DATABASE_URL/REDIS_URL, API_KEY, CORS
+docker compose up -d                      # postgres/redis/migrate are skipped
+
+curl -s localhost:8000/ready             # ready:true when DB+Redis+worker GPU are good
 ```
+
+**The single command to (re)build and bring the system up** — add `--build`:
+
+```bash
+docker compose --profile infra up -d --build   # self-contained
+docker compose up -d --build                    # external DB (Path B)
+```
+
+See **[docs/DEPLOYMENT.md §2 Database options](docs/DEPLOYMENT.md)** for the native
+and cloud (Aiven/Supabase/Neon) walkthroughs and DB-GUI (pgAdmin/DBeaver) setup.
 
 ## Use it
 

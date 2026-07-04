@@ -3,8 +3,11 @@
 This is the exact procedure to deploy Katbook VIP on a dedicated NVIDIA **RTX 5090
 (32 GB, Blackwell, sm_120)** server. It assumes you have never seen this project.
 
-Everything runs in Docker Compose: `api`, `worker` (GPU), `vllm` (GPU),
-`embeddings` (CPU), `redis`, `postgres`, and a one-shot `migrate`.
+The app runs in Docker Compose: `api`, `worker` (GPU), `vllm` (GPU), `embeddings`
+(CPU), plus the console `ui`. The stateful `postgres`, `redis`, and the one-shot
+`migrate` are **optional** (compose profile `infra`): run them in Docker for a
+self-contained stack, or point the app at an **external** database (native or
+cloud) — see **[§2 Database options](#2-database-options)**.
 
 ---
 
@@ -44,22 +47,108 @@ You want `RESULT: PASS`. If the GPU matmul fails with *"no kernel image is
 available for execution on the device"*, your torch was not built for sm_120 — use
 the cu128 (or cu128 **nightly**) index, see Troubleshooting #1.
 
-## 2. Configure `.env`
+## 2. Database options
+
+Postgres (with **pgvector**) and Redis are the only stateful services. You choose
+**where they run** — the app code is identical either way; it just reads
+`DATABASE_URL` / `REDIS_URL` from `.env`. The bundled `postgres`, `redis`, and the
+one-shot `migrate` service live in the **`infra` compose profile**, so a plain
+`docker compose up -d` skips them and the app connects to an external database.
+
+| Option | DB/Redis run… | Start command | `.env` template |
+|---|---|---|---|
+| **A — Self-contained** (default) | in Docker (bundled) | `docker compose --profile infra up -d` | `.env.example` |
+| **B — Native Postgres** (recommended prod) | natively on the host | `docker compose up -d` | `.env.production` |
+| **C — Cloud managed** (Aiven/Supabase/Neon) | at a cloud provider | `docker compose up -d` | `.env.production` (cloud URL) |
+
+### Option A — Self-contained (evaluation / testing)
+
+Simplest: Compose runs the database, Redis, migrations, and the app together.
 
 ```bash
 cp .env.example .env
-# edit .env: set POSTGRES_PASSWORD, API_KEY, CORS_ORIGINS (the frontend origin),
-# and confirm KVIP_PROFILE=production, KVIP_EMBED_MODEL=BAAI/bge-m3, KVIP_EMBED_DIM=1024.
+# edit: POSTGRES_PASSWORD, API_KEY, CORS_ORIGINS; DATABASE_URL points at the
+# bundled `postgres` service by name (postgres:5432) — leave as-is.
+docker compose --profile infra up -d     # `migrate` runs Alembic first, then api/worker
 ```
 
-Secrets live only in `.env` (gitignored). The frontend talks to the API with the
-`X-API-Key` header = `API_KEY`, from an origin listed in `CORS_ORIGINS`.
+Data lives in the `pgdata` Docker volume. Good for a quick trial; the DB's
+lifecycle is tied to Docker.
+
+### Option B — Native Postgres (recommended for production)
+
+Run Postgres 16 + pgvector + Redis natively so the data persists **independently of
+Docker** (survives `docker compose down -v`, easier to back up, tune, and monitor).
+
+```bash
+# 1) install on the server (Ubuntu)
+sudo apt install postgresql-16 postgresql-16-pgvector redis-server
+
+# 2) create the database + user, enable pgvector
+sudo -u postgres createuser katbook -P            # prompts for a password
+sudo -u postgres createdb katbook_vip -O katbook
+psql -U katbook -d katbook_vip -c "CREATE EXTENSION vector;"
+
+# 3) migrate the schema ONCE by hand (no `migrate` container in this path)
+#    run from the repo root, in a venv with the API deps installed:
+alembic upgrade head
+
+# 4) point the app at it and start WITHOUT the bundled DB
+cp .env.production .env
+# edit: set the real password in DATABASE_URL/DATABASE_URL_SYNC (replace CHANGE_ME),
+# API_KEY, CORS_ORIGINS. If the containers must reach a host-native Postgres, use
+# the host LAN IP (or host.docker.internal via --add-host on Linux), not localhost.
+docker compose up -d                              # postgres/redis/migrate are skipped
+```
+
+Re-run `alembic upgrade head` by hand whenever you deploy a version that adds a
+migration (the `migrate` container only runs under `--profile infra`).
+
+### Option C — Cloud managed (Aiven / Supabase / Neon)
+
+Identical to Option B, but the database lives at a managed provider — no local
+Postgres to install. Create the instance, enable the `vector` extension (most
+providers expose `CREATE EXTENSION vector;`), then put the provider's connection
+string in `.env.production`:
+
+```bash
+cp .env.production .env
+# DATABASE_URL=postgresql://<user>:<pass>@<host>.aivencloud.com:5432/katbook_vip?sslmode=require
+# DATABASE_URL_SYNC=<same>
+# REDIS_URL=redis://<managed-redis-host>:6379/0     (or a local redis for the queue)
+alembic upgrade head            # migrate the cloud DB once, from your workstation
+docker compose up -d
+```
+
+> ⚠️ **Latency:** a cloud DB adds network round-trips to **every** DB write. The
+> worker upserts a video + all its segments per job; on the 95k backlog that
+> latency compounds. Prefer a DB in the **same region/VPC** as the GPU box, or use
+> Option B (native, loopback-fast) for the bulk ingest and reserve cloud for
+> smaller/managed deployments.
+
+### Connect a DB GUI (pgAdmin / DBeaver) — all options
+
+Same client, the host/port just differ by option:
+
+| Option | Host | Port | Notes |
+|---|---|---|---|
+| A (bundled) | `localhost` (or `127.0.0.1`) | `5432` | Only reachable if the port is published — the dev override (`docker-compose.override.dev.yml`) maps `127.0.0.1:5432:5432`. The production compose does **not** publish it; add a `ports:` mapping or tunnel `docker compose exec postgres psql`. |
+| B (native) | `localhost` / server IP | `5432` | Direct — it's a normal Postgres on the host. |
+| C (cloud) | provider host | `5432` | Enable **SSL/TLS** (`sslmode=require`); use the provider's credentials. |
+
+In **DBeaver**: New Connection → PostgreSQL → Host/Port/Database (`katbook_vip`) /
+User (`katbook`) / Password → Test Connection. In **pgAdmin**: Register → Server →
+*Connection* tab, same fields. The `segments.embedding` column shows as `vector`;
+install pgvector-aware tooling if you want to inspect vectors, otherwise it renders
+as text. Secrets live only in `.env` (gitignored). The frontend talks to the API
+with the `X-API-Key` header = `API_KEY`, from an origin listed in `CORS_ORIGINS`.
 
 ## 3. Build & start
 
 ```bash
 docker compose build            # builds api (slim) + worker (cu128) images
-docker compose up -d            # starts everything; `migrate` runs Alembic first
+# Option A (bundled DB):   docker compose --profile infra up -d   # migrate runs first
+# Option B/C (external DB): docker compose up -d                  # DB skipped; migrate by hand
 docker compose ps               # all healthy? (vllm takes a few minutes to load Qwen)
 docker compose logs -f worker   # watch the worker come up + publish its GPU heartbeat
 ```

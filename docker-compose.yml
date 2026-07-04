@@ -25,6 +25,11 @@ x-gpu-reservation: &gpu-reservation
 services:
   postgres:
     image: pgvector/pgvector:pg16
+    # OPTIONAL bundled database — only started with `--profile infra`. Plain
+    # `docker compose up -d` skips it so api/worker talk to an EXTERNAL Postgres
+    # via DATABASE_URL (native on the host, or a cloud provider). See
+    # docs/DEPLOYMENT.md → "Database options".
+    profiles: ["infra"]
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -41,6 +46,10 @@ services:
 
   redis:
     image: redis:7-alpine
+    # OPTIONAL bundled broker — only started with `--profile infra`. Plain
+    # `docker compose up -d` skips it so api/worker use an EXTERNAL Redis via
+    # REDIS_URL. See docs/DEPLOYMENT.md → "Database options".
+    profiles: ["infra"]
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -57,6 +66,10 @@ services:
       context: .
       dockerfile: docker/Dockerfile.api
     command: ["alembic", "upgrade", "head"]
+    # OPTIONAL — only runs with `--profile infra` (migrates the BUNDLED postgres).
+    # With an EXTERNAL database you migrate it once by hand: `alembic upgrade head`
+    # (see docs/DEPLOYMENT.md → "Database options", Option B/C).
+    profiles: ["infra"]
     env_file: [.env]
     environment:
       KVIP_EMBED_DIM: ${KVIP_EMBED_DIM}
@@ -109,11 +122,17 @@ services:
     env_file: [.env]
     ports:
       - "8000:8000"
+    # `required: false` — these dependencies are honoured ONLY when the bundled
+    # infra is started (`--profile infra`): api then waits for the migration and
+    # redis. With an EXTERNAL DB/Redis (plain `up -d`) they aren't in the project,
+    # so api starts straight away and connects via DATABASE_URL / REDIS_URL.
     depends_on:
       migrate:
         condition: service_completed_successfully
+        required: false
       redis:
         condition: service_healthy
+        required: false
     volumes:
       # SHARED inbox: the API writes multipart uploads here and the worker reads
       # them from the SAME volume. Must match the worker's /data/inbox mount.
@@ -137,11 +156,16 @@ services:
       dockerfile: docker/Dockerfile.worker
     restart: unless-stopped
     env_file: [.env]
+    # `required: false` — honoured only under `--profile infra` (bundled DB/Redis);
+    # with an EXTERNAL DB/Redis the worker starts straight away and connects via
+    # DATABASE_URL / REDIS_URL. Migrate the external DB once by hand.
     depends_on:
       migrate:
         condition: service_completed_successfully
+        required: false
       redis:
         condition: service_healthy
+        required: false
     volumes:
       - model-cache:/models
       - video-inbox:/data/inbox

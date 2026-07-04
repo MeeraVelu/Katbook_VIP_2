@@ -19,8 +19,11 @@ dist/
 
 # generated artifacts (rebuilt from Postgres on demand)
 results/
+outputs/
+uploads/
 checkpoints/
 payload.json
+*.log
 
 # local data / caches (mounted volumes in compose)
 backups/

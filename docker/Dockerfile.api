@@ -8,10 +8,10 @@ ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /build
 
 # Install API deps into an isolated prefix we copy into the final stage.
-COPY requirements/ requirements/
+COPY requirements.txt .
 RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --upgrade pip \
-    && /opt/venv/bin/pip install -r requirements/api.txt
+    && /opt/venv/bin/pip install -r requirements.txt
 
 
 FROM python:3.12-slim AS final

@@ -1,9 +1,0 @@
-# Developer / CI tooling. Tests run on CPU with all models mocked (no GPU).
--r api.txt
-pytest==8.4.1
-pytest-cov==6.2.1
-httpx==0.28.1
-ruff==0.12.4
-mypy==1.16.1
-types-redis==4.6.0.20241004
-typer==0.16.0

@@ -33,8 +33,8 @@ RUN pip install --index-url https://download.pytorch.org/whl/cu128 \
         "torch==2.9.1" "torchvision==0.24.1"
 
 # 2) the rest of the pipeline stack (torch already satisfied).
-COPY requirements/ requirements/
-RUN pip install -r requirements/worker.txt
+COPY requirements-worker.txt .
+RUN pip install -r requirements-worker.txt
 
 # 3) spaCy English model (used by the NLP stage) baked into the image.
 RUN python -m spacy download en_core_web_sm

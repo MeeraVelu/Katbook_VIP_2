@@ -12,7 +12,7 @@ GPU-server-based — see the root `README.md` and `docs/DEPLOYMENT.md`).
 | `kaggle_run.py` | Headless push/run of the notebook via the Kaggle CLI. |
 | `sync_results.py` | Laptop tool: mirror Neon Postgres results into `./results`. **Superseded by** `scripts/cli.py export` + the live API. |
 | `search.py` | Laptop keyword/semantic search CLI. **Superseded by** `GET /api/v1/search` + `scripts/cli.py search`. |
-| `requirements-local.txt` | Laptop-only deps for the two scripts above. **Superseded by** `requirements/local.txt`. |
+| `requirements-local.txt` | Laptop-only deps for the two scripts above. **Superseded by** `pyproject.toml [dev]` (typer + httpx) for `scripts/cli.py`. |
 | `OPERATIONS.md` | The Kaggle run/sync/troubleshoot runbook. **Superseded by** `docs/DEPLOYMENT.md`. |
 
 The pipeline *logic* these drove was preserved and productionized in

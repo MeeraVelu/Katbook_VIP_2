@@ -1,3 +1,0 @@
-# Laptop/operator tooling (no GPU, no ML) for scripts/cli.py.
-typer==0.16.0
-httpx==0.28.1

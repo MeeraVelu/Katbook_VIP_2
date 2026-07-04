@@ -18,7 +18,7 @@ help:
 	@echo "  verify-gpu   run scripts/verify_gpu.py (run on the 5090 box FIRST)"
 
 install-dev:
-	$(PY) -m pip install -r requirements/dev.txt
+	$(PY) -m pip install -e ".[dev]"
 	$(PY) -m spacy download en_core_web_sm
 
 lint:

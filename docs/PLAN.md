@@ -63,7 +63,8 @@ GPU-specific parts are correct-by-construction and documented.
 - **[mod] `katbook_vip/pipeline.py`** — add an optional `progress` callback invoked
   after each stage (worker uses it to update job state). Behavior otherwise identical.
 - **[mod] `katbook_vip/run.py`** — structured logging; settings-based; batch CLI kept.
-- **[mod] `katbook_vip/__init__.py`, `setup.py`** — version → `3.0.0`.
+- **[mod] `katbook_vip/__init__.py`** — version → `3.0.0`. (Packaging is
+  `pyproject.toml`-only; the legacy `setup.py` shim was removed in the cleanup pass.)
 
 ## 2. API service (`app/`) — FastAPI, **zero ML deps, zero UI**
 
@@ -164,7 +165,9 @@ GPU-specific parts are correct-by-construction and documented.
 - **[new] `pyproject.toml`** — project metadata, ruff + ruff-format + mypy(`app/`) config.
 - **[new] `Makefile`** — `smoke`, `test`, `lint`, `format`, `typecheck`, `migrate`,
   `up`, `down`, `verify-gpu`.
-- **[new] `requirements/{base,api,worker,dev,local}.txt`** — pinned; worker uses cu128.
+- **[new] pinned requirements** — consolidated in the cleanup pass to two root
+  files: `requirements.txt` (API image) + `requirements-worker.txt` (worker, cu128);
+  dev/test/CLI deps live in `pyproject.toml [project.optional-dependencies].dev`.
 - **[new] `.env.example`** — every variable, commented. Secrets via env only.
 - **[mod] `.gitignore`** — add `.env`, inbox, model-cache, `*.sqlite`.
 

@@ -21,20 +21,26 @@ pipeline per video: voice/silent router → transcribe (any lang) → adaptive f
 
 ## What's here
 
+Root holds only tooling entry-points; everything else is grouped by domain (each
+folder has its own one-line `README.md`).
+
 ```
-app/            FastAPI service — routers, schemas, services, deps (NO ML, NO UI)
-worker/         Celery worker — runs the GPU pipeline, one video per task
-katbook_vip/    the pipeline package (settings, router, ingest, audio, visual,
-                nlp, segment, tagging, storage, export, llm_backend, utils)
-alembic/        database migrations (owns the schema)
-scripts/        verify_gpu, smoke, cli, reembed, backup, export_tensorrt, make_test_video
-ui/             static operator console (vanilla HTML/JS, no build) served by nginx
-docker/         Dockerfile.api (slim), Dockerfile.worker (CUDA 12.8), Dockerfile.ui, healthcheck
-tests/          pytest — all pass on CPU with models mocked
-docs/           DEPLOYMENT · API · DATABASE · ARCHITECTURE
-legacy/         the retired Kaggle POC (notebook, kaggle_run, sync/search scripts)
-docker-compose.yml + docker-compose.override.dev.yml
-requirements/   base · api · worker (cu128) · dev · local
+app/                        API domain — FastAPI service (routers/schemas/services), no ML, no UI
+katbook_vip/                pipeline domain — router, ingest, audio, visual, nlp, segment, tagging, storage
+worker/                     jobs domain — Celery worker (one video per task, per-stage progress)
+ui/                         UI domain — static operator console (vanilla HTML/JS, no build) via nginx
+alembic/                    database domain — schema migrations (owns the schema)
+docker/                     container domain — Dockerfile.api/.worker/.ui + entrypoint/healthcheck
+scripts/                    ops CLIs — cli, verify_gpu, smoke, reembed, backup, export_tensorrt, make_test_video
+tests/                      pytest suite (CPU, models mocked)
+docs/                       DEPLOYMENT · API · DATABASE · ARCHITECTURE · PLAN · CLEANUP
+legacy/                     retired Kaggle POC (notebook, kaggle_run, sync/search scripts)
+
+docker-compose.yml          production stack (8 services)
+docker-compose.override.dev.yml   CPU/dev override
+requirements.txt            API image deps         requirements-worker.txt   worker (GPU) image deps
+pyproject.toml              build + ruff/mypy/pytest config, dev extras ([dev])
+alembic.ini  Makefile  .env.example  .gitignore  .dockerignore  README.md
 ```
 
 ## Deploy (the short version)
@@ -93,7 +99,7 @@ still loads no UI; the browser calls the API over HTTP, so keep this origin in
 Everything is verifiable on CPU:
 
 ```bash
-pip install -r requirements/dev.txt
+pip install -e ".[dev]"
 make lint          # ruff
 make test          # pytest — all green on CPU, models mocked
 make smoke         # full pipeline on a generated 10s clip (tiny models, stub tagger, no DB)

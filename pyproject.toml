@@ -9,7 +9,7 @@ description = "Katbook Video Intelligence Platform — production, API-first vid
 requires-python = ">=3.11"
 readme = "README.md"
 # Core deps needed to import the pipeline + API + worker glue (no GPU/ML libs;
-# those are installed from requirements/worker.txt in the worker image).
+# those are installed from requirements-worker.txt in the worker image).
 dependencies = [
     "pydantic>=2.11",
     "pydantic-settings>=2.10",
@@ -27,7 +27,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.4", "pytest-cov>=6.2", "ruff>=0.12", "mypy>=1.16", "typer>=0.16"]
+# Dev/test/CLI tooling (CPU only; models mocked in tests). Install: pip install -e ".[dev]"
+dev = [
+    "pytest>=8.4", "pytest-cov>=6.2", "ruff>=0.12", "mypy>=1.16",
+    "typer>=0.16", "httpx>=0.28", "types-redis>=4.6",
+]
 
 [project.scripts]
 katbook = "scripts.cli:app"

@@ -1,0 +1,21 @@
+# API image dependencies (docker/Dockerfile.api). NO torch / transformers / ML —
+# the API process stays lightweight. Pinned for reproducibility; bump deliberately.
+# Dev/test/CLI tooling lives in pyproject.toml [project.optional-dependencies].dev
+# (install with: pip install -e ".[dev]").
+
+# --- shared infra (mirrored in requirements-worker.txt) ---
+pydantic==2.11.7
+pydantic-settings==2.10.1
+SQLAlchemy==2.0.41
+psycopg[binary]==3.2.9
+pgvector==0.4.1
+redis==5.2.1
+celery==5.5.3
+alembic==1.16.2
+
+# --- API service ---
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+python-multipart==0.0.20     # multipart uploads to the inbox
+httpx==0.28.1
+openai==1.99.1               # OpenAI-compatible embeddings client (query embedding only)

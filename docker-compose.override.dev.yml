@@ -6,8 +6,8 @@
 #
 # Lets you exercise the API + queue + DB + worker wiring on a laptop without a GPU.
 #
-# NOTE: postgres/redis are now in the "infra" profile, so add --profile infra to
-# use the bundled laptop DB/broker:
+# NOTE: postgres is in the "infra" profile (redis always runs), so add
+# --profile infra to use the bundled laptop DB:
 #   docker compose -f docker-compose.yml -f docker-compose.override.dev.yml \
 #     --profile infra up -d
 # =============================================================================

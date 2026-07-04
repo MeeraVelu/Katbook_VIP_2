@@ -49,21 +49,25 @@ the cu128 (or cu128 **nightly**) index, see Troubleshooting #1.
 
 ## 2. Database options
 
-Postgres (with **pgvector**) and Redis are the only stateful services. You choose
-**where they run** — the app code is identical either way; it just reads
-`DATABASE_URL` / `REDIS_URL` from `.env`. The bundled `postgres`, `redis`, and the
-one-shot `migrate` service live in the **`infra` compose profile**, so a plain
-`docker compose up -d` skips them and the app connects to an external database.
+**Postgres** (with **pgvector**) is the choice here — you decide **where it runs**;
+the app code is identical either way, it just reads `DATABASE_URL` from `.env`. The
+bundled `postgres` and the one-shot `migrate` service live in the **`infra` compose
+profile**, so a plain `docker compose up -d` skips them and the app connects to an
+external database. **Redis is NOT in the profile — it always runs as a local
+Compose service** (the Celery broker is local, and managed DB providers don't offer
+Redis); point `REDIS_URL` elsewhere only if you run a dedicated Redis.
 
-| Option | DB/Redis run… | Start command | `.env` template |
+| Option | Postgres runs… | Start command | `.env` template |
 |---|---|---|---|
 | **A — Self-contained** (default) | in Docker (bundled) | `docker compose --profile infra up -d` | `.env.example` |
 | **B — Native Postgres** (recommended prod) | natively on the host | `docker compose up -d` | `.env.production` |
-| **C — Cloud managed** (Aiven/Supabase/Neon) | at a cloud provider | `docker compose up -d` | `.env.production` (cloud URL) |
+| **C — Cloud managed** (Supabase/Aiven/Neon) | at a cloud provider | `docker compose up -d` | `.env.production` (cloud URL) |
+
+In every option Redis is the bundled Compose service (`redis://redis:6379/0`).
 
 ### Option A — Self-contained (evaluation / testing)
 
-Simplest: Compose runs the database, Redis, migrations, and the app together.
+Simplest: Compose runs Postgres, Redis, migrations, and the app together.
 
 ```bash
 cp .env.example .env
@@ -77,12 +81,13 @@ lifecycle is tied to Docker.
 
 ### Option B — Native Postgres (recommended for production)
 
-Run Postgres 16 + pgvector + Redis natively so the data persists **independently of
-Docker** (survives `docker compose down -v`, easier to back up, tune, and monitor).
+Run Postgres 16 + pgvector natively so the data persists **independently of Docker**
+(survives `docker compose down -v`, easier to back up, tune, and monitor). Redis
+stays the bundled Compose service, so you only install Postgres.
 
 ```bash
 # 1) install on the server (Ubuntu)
-sudo apt install postgresql-16 postgresql-16-pgvector redis-server
+sudo apt install postgresql-16 postgresql-16-pgvector
 
 # 2) create the database + user, enable pgvector
 sudo -u postgres createuser katbook -P            # prompts for a password
@@ -91,14 +96,15 @@ psql -U katbook -d katbook_vip -c "CREATE EXTENSION vector;"
 
 # 3) migrate the schema ONCE by hand (no `migrate` container in this path)
 #    run from the repo root, in a venv with the API deps installed:
-alembic upgrade head
+DATABASE_URL=postgresql://katbook:<pass>@localhost:5432/katbook_vip alembic upgrade head
 
 # 4) point the app at it and start WITHOUT the bundled DB
 cp .env.production .env
-# edit: set the real password in DATABASE_URL/DATABASE_URL_SYNC (replace CHANGE_ME),
-# API_KEY, CORS_ORIGINS. If the containers must reach a host-native Postgres, use
-# the host LAN IP (or host.docker.internal via --add-host on Linux), not localhost.
-docker compose up -d                              # postgres/redis/migrate are skipped
+# edit DATABASE_URL (replace CHANGE_ME with the real password), API_KEY, CORS_ORIGINS.
+# NOTE: inside a container "localhost" is the CONTAINER, not the host — to reach a
+# host-native Postgres use the host LAN IP, or host.docker.internal via
+# `extra_hosts: ["host.docker.internal:host-gateway"]` on Linux.
+docker compose up -d                              # postgres + migrate skipped; redis runs
 ```
 
 Re-run `alembic upgrade head` by hand whenever you deploy a version that adds a
@@ -107,18 +113,33 @@ migration (the `migrate` container only runs under `--profile infra`).
 ### Option C — Cloud managed (Aiven / Supabase / Neon)
 
 Identical to Option B, but the database lives at a managed provider — no local
-Postgres to install. Create the instance, enable the `vector` extension (most
-providers expose `CREATE EXTENSION vector;`), then put the provider's connection
-string in `.env.production`:
+Postgres to install (Redis is still the bundled Compose service). Create the
+instance, enable the `vector` extension (most providers expose `CREATE EXTENSION
+vector;`), then put the provider's connection string in `.env.production`:
 
 ```bash
 cp .env.production .env
-# DATABASE_URL=postgresql://<user>:<pass>@<host>.aivencloud.com:5432/katbook_vip?sslmode=require
-# DATABASE_URL_SYNC=<same>
-# REDIS_URL=redis://<managed-redis-host>:6379/0     (or a local redis for the queue)
+# DATABASE_URL=postgresql://<user>:<pass>@<host>:5432/<db>?sslmode=require
 alembic upgrade head            # migrate the cloud DB once, from your workstation
-docker compose up -d
+docker compose up -d            # redis runs; postgres + migrate skipped
 ```
+
+**Supabase specifics** (verified): use the **Session pooler** connection string
+(Dashboard → Connect → *Session pooler*), NOT the *Direct* one:
+
+- Direct host `db.<ref>.supabase.co` is **IPv6-only** → fails from Docker (no A
+  record). The Session pooler `aws-<n>-<region>.pooler.supabase.com` is IPv4.
+- Use port **5432** (session mode). Avoid port **6543** (transaction pooler) — it
+  breaks psycopg3 prepared statements and Alembic.
+- The user is `postgres.<project-ref>`, the database is `postgres`, and append
+  `?sslmode=require`:
+
+  ```
+  DATABASE_URL=postgresql://postgres.<ref>:<pass>@aws-<n>-<region>.pooler.supabase.com:5432/postgres?sslmode=require
+  ```
+
+Enable pgvector from the Supabase SQL editor (`create extension if not exists
+vector;`) before `alembic upgrade head`.
 
 > ⚠️ **Latency:** a cloud DB adds network round-trips to **every** DB write. The
 > worker upserts a video + all its segments per job; on the 95k backlog that

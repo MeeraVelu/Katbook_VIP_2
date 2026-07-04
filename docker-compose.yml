@@ -46,10 +46,9 @@ services:
 
   redis:
     image: redis:7-alpine
-    # OPTIONAL bundled broker — only started with `--profile infra`. Plain
-    # `docker compose up -d` skips it so api/worker use an EXTERNAL Redis via
-    # REDIS_URL. See docs/DEPLOYMENT.md → "Database options".
-    profiles: ["infra"]
+    # ALWAYS runs (not in a profile): the Celery broker is local and lightweight,
+    # and managed databases (Supabase / Neon / cloud Postgres) don't provide Redis.
+    # Point REDIS_URL elsewhere only if you run a dedicated/managed Redis.
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -122,16 +121,14 @@ services:
     env_file: [.env]
     ports:
       - "8000:8000"
-    # `required: false` — these dependencies are honoured ONLY when the bundled
-    # infra is started (`--profile infra`): api then waits for the migration and
-    # redis. With an EXTERNAL DB/Redis (plain `up -d`) they aren't in the project,
-    # so api starts straight away and connects via DATABASE_URL / REDIS_URL.
+    # redis always runs -> a normal required dependency. migrate only exists under
+    # `--profile infra` (bundled DB), so `required: false` makes api wait for it
+    # when present and start straight away with an EXTERNAL DB (plain `up -d`).
     depends_on:
-      migrate:
-        condition: service_completed_successfully
-        required: false
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
         required: false
     volumes:
       # SHARED inbox: the API writes multipart uploads here and the worker reads
@@ -156,15 +153,14 @@ services:
       dockerfile: docker/Dockerfile.worker
     restart: unless-stopped
     env_file: [.env]
-    # `required: false` — honoured only under `--profile infra` (bundled DB/Redis);
-    # with an EXTERNAL DB/Redis the worker starts straight away and connects via
-    # DATABASE_URL / REDIS_URL. Migrate the external DB once by hand.
+    # redis always runs -> required. migrate only exists under `--profile infra`,
+    # so `required: false` lets the worker start straight away with an EXTERNAL DB
+    # (plain `up -d`); migrate the external DB once by hand.
     depends_on:
-      migrate:
-        condition: service_completed_successfully
-        required: false
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
         required: false
     volumes:
       - model-cache:/models

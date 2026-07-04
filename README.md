@@ -54,20 +54,22 @@ python scripts/verify_gpu.py            # expect RESULT: PASS
 ```
 
 Then pick where the **database** runs — the app is identical either way, it just
-reads `DATABASE_URL`/`REDIS_URL`. Postgres, Redis, and `migrate` are bundled behind
-the **`infra`** compose profile, so a plain `up` skips them for an external DB.
+reads `DATABASE_URL`. Postgres and `migrate` are bundled behind the **`infra`**
+compose profile, so a plain `up` skips them for an external DB. **Redis always runs
+as a local Compose service** (managed DBs don't provide one).
 
 ```bash
-# ── Path A · self-contained (bundled Postgres+Redis in Docker) — eval/testing ──
+# ── Path A · self-contained (bundled Postgres in Docker) — eval/testing ────────
 cp .env.example .env                     # set POSTGRES_PASSWORD, API_KEY, CORS_ORIGINS
 docker compose --profile infra up -d     # migrate runs Alembic before api/worker
 
-# ── Path B · external DB (native Postgres 16 + pgvector, or cloud) — production ─
-#   sudo apt install postgresql-16 postgresql-16-pgvector redis-server
-#   sudo -u postgres createuser katbook -P && sudo -u postgres createdb katbook_vip -O katbook
-#   psql -U katbook -d katbook_vip -c "CREATE EXTENSION vector;" && alembic upgrade head
-cp .env.production .env                   # set the real DATABASE_URL/REDIS_URL, API_KEY, CORS
-docker compose up -d                      # postgres/redis/migrate are skipped
+# ── Path B · external DB (cloud e.g. Supabase, or native Postgres) — production ─
+#   cloud: enable pgvector + use the connection string (Supabase → SESSION POOLER, :5432)
+#   native: sudo apt install postgresql-16 postgresql-16-pgvector
+#           sudo -u postgres createdb katbook_vip -O katbook  (createuser katbook -P first)
+#   then migrate once:  alembic upgrade head
+cp .env.production .env                   # set the real DATABASE_URL, API_KEY, CORS
+docker compose up -d                      # postgres + migrate skipped; redis runs
 
 curl -s localhost:8000/ready             # ready:true when DB+Redis+worker GPU are good
 ```

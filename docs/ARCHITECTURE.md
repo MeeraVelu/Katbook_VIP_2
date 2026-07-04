@@ -14,7 +14,8 @@ upgraded.
 
 ```mermaid
 flowchart LR
-    FE[Frontend (separate)] -->|HTTPS + X-API-Key| API
+    BR[Browser] -->|HTTP| UI[ui: nginx\nReact SPA console]
+    UI -->|same-origin proxy\n/api,/health,/ready UNCHANGED| API
     subgraph Docker Compose
         API[api: FastAPI\nno ML, no UI] -->|enqueue by name| REDIS[(redis\nbroker+backend)]
         API -->|SQL| PG[(postgres 16\n+ pgvector)]
@@ -22,12 +23,18 @@ flowchart LR
         REDIS --> WK[worker: Celery\nGPU pipeline]
         WK -->|SQL upsert + job status| PG
         WK -->|OpenAI /v1 tagging| VLLM[vllm\nQwen2.5-7B FP8]
-        WK -.->|GPU heartbeat| REDIS
+        WK -.->|GPU heartbeat + tier| REDIS
         MIG[migrate: alembic] --> PG
     end
-    WK --- GPU[[RTX 5090\nsm_120]]
+    WK --- GPU[[GPU\nauto-detected tier]]
     VLLM --- GPU
 ```
+
+The **ui** service is the product's default console (React SPA served by nginx),
+but the backend is still API-first: nginx reverse-proxies `/api`,`/health`,`/ready`
+to the `api` service **unchanged** (same-origin), so any external frontend can
+replace the console via the same documented API. The `api` process loads **zero**
+UI code and no ML model.
 
 - **api** — the only thing the frontend talks to. Versioned REST (`/api/v1`),
   Pydantic v2 models, consistent error envelope, request-ID middleware, API-key
@@ -103,6 +110,28 @@ OCR** (text-likely scenes, or all frames when silent), **batched CLIP**, and
 | Logging | `print` | structured JSON (request_id / video_id / stage) |
 | Decode | CPU ffmpeg | **NVDEC** (`-hwaccel cuda`) with CPU fallback |
 | Runtime | T4 (sm_75) | **RTX 5090 / Blackwell sm_120**, cu128 torch |
+
+## GPU tiers (auto-detected)
+
+The worker detects its GPU at startup (`pipeline/gpu_profile.py`) from the device
+name + VRAM + compute capability and adapts the **worker-loaded** model knobs.
+`GPU_PROFILE` env forces a tier. Precedence, layered into the existing settings
+system: **explicit env > GPU_PROFILE tier > profile defaults**.
+
+| Tier | Detected when | Whisper | CLIP | YOLO | BLIP-2 | OCR | Resident stack |
+|---|---|---|---|---|---|---|---|
+| `cpu` | no CUDA | tiny/int8 | ViT-B/32 | off | off | en | no |
+| `t4_16gb` | VRAM < 20 GB | medium | ViT-B/32 | yolov8n | opt-2.7b | en | no |
+| `rtx_high` | 20–30 GB (4080/4090) | large-v3 | ViT-L/14 | yolo11l | opt-2.7b | en+ta+hi | yes |
+| `rtx5090` | ≥30 GB / sm_120 / "5090" | large-v3 | ViT-L/14 | yolo11x | opt-2.7b | en+ta+hi | yes |
+| `datacenter` | A100/H100/H200/B200 | large-v3 | ViT-L/14 | yolo11x | opt-6.7b | en+ta+hi | yes |
+
+**Invariant across every tier:** the embedder is **BGE-M3 (1024-d)** because the
+DB column is `vector(1024)` — the worker asserts `EMBED_DIM == 1024` at startup and
+fails fast otherwise. vLLM tagging stays a compose-level service (the tier never
+toggles it). The resolved tier is recorded in each video's `runtime` metadata and
+published on the worker heartbeat → shown on `/ready`, the console's System page,
+and the header GpuTierChip.
 
 ## Preserved safety rules (do not regress)
 

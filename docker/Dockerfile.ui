@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # ---------------------------------------------------------------------------
 # UI image — React SPA built with Vite, served by nginx.
-#   stage 1: node:20-alpine  → tsc -b && vite build → /app/dist
+#   stage 1: node:20-alpine  → tsc --noEmit && vite build → /app/dist
 #   stage 2: nginx:alpine     → serve dist + reverse-proxy /api,/health,/ready
 # The API image gains ZERO UI code/deps; the browser talks to the API through
 # this container's same-origin proxy (see docker/nginx.conf).

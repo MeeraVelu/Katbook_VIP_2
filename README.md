@@ -28,7 +28,7 @@ folder has its own one-line `README.md`).
 api/         API domain — FastAPI service (routers/schemas/services), no ML, no UI
 pipeline/    pipeline domain — router, ingest, audio, visual, nlp, segment, tagging, storage
 worker/      jobs domain — Celery worker (one video per task, per-stage progress)
-ui/          UI domain — static operator console (vanilla HTML/JS, no build) via nginx
+ui/          UI domain — React SPA "mission control" console (Vite + Tailwind) via nginx
 database/    database domain — Alembic schema migrations (owns the schema)
 docker/      container domain — Dockerfile.api/.worker/.ui + entrypoint/healthcheck
 scripts/     ops CLIs — cli, verify_gpu, smoke, reembed, backup, export_tensorrt, make_test_video
@@ -87,12 +87,14 @@ team: **[docs/API.md](docs/API.md)**.
 
 ### Console UI
 
-A bundled, no-build operator console ships in [`ui/`](ui/README.md) (served by the
-`ui` compose service at **http://localhost:8080**): browse/filter videos, view a
-record + segments, register/upload/batch, watch live job progress, and search
-(semantic/keyword/hybrid). It's a **separate static container** — the API process
-still loads no UI; the browser calls the API over HTTP, so keep this origin in
-`CORS_ORIGINS`. Set the API URL + `X-API-Key` in the console's top bar.
+A **React SPA** "mission control" console ships in [`ui/`](ui/README.md) (built by
+`docker/Dockerfile.ui`, served by nginx as the `ui` compose service at
+**http://localhost:8080**): library + segment timelines, live job PipelineStepper,
+`/`-key command-bar search (semantic/keyword/hybrid), ingest, and a System page
+with the live GPU tier. It's a **separate container** — the API process loads no UI;
+nginx proxies `/api`,`/health`,`/ready` to the API **same-origin** (no CORS needed
+for the console). Set your `X-API-Key` via the header key icon. Any external
+frontend can replace it over the same API.
 
 ## Verify without a GPU
 

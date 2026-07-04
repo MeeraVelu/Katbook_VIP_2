@@ -3,11 +3,17 @@
 Base URL: `http://<host>:8000` · Versioned prefix: `/api/v1` · OpenAPI/Swagger:
 `GET /docs` · schema: `GET /openapi.json`.
 
-The backend process contains **no UI** — it is a REST API only. A bundled static
-operator console (nginx, no build step) ships separately in [`ui/`](../ui/README.md)
-(compose `ui` service, default http://localhost:8080) and talks to this API purely
-over HTTP; your production frontend is likewise an independent HTTP client. Keep
-each client's origin in `CORS_ORIGINS`.
+The backend process contains **no UI** — it is a REST API only. The bundled
+console ([`ui/`](../ui/README.md), a React SPA served by nginx, compose `ui`
+service at http://localhost:8080) talks to this API purely over HTTP and, in
+compose, reaches it **same-origin** via nginx proxy (so it needs no CORS entry).
+Any external frontend is likewise an independent HTTP client — keep its origin in
+`CORS_ORIGINS`.
+
+> **Contract stability:** this API is unchanged by the console — the console adds
+> no backend endpoints and depends only on the documented `/api/v1/*`, `/health`,
+> `/ready` surface below. Swapping the console for another frontend requires no
+> backend change.
 
 ## Auth & CORS contract
 

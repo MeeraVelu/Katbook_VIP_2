@@ -71,6 +71,33 @@ curl -s localhost:8000/health          # {"status":"ok",...}
 curl -s localhost:8000/ready           # ready:true once DB + Redis + worker GPU heartbeat are good
 ```
 
+The build also produces the **console UI** (React SPA via nginx) at
+**http://localhost:${UI_PORT:-8080}** — open it, click the key icon, and enter your
+`API_KEY`. It proxies to the API same-origin, so no CORS setup is needed for it.
+
+### Verify the detected GPU tier
+
+The worker auto-detects its tier (`cpu | t4_16gb | rtx_high | rtx5090 |
+datacenter`) and adapts the model knobs. Confirm it:
+
+```bash
+docker compose logs worker | grep 'GPU tier'          # e.g. "GPU tier = rtx5090 (source=auto)"
+curl -s localhost:8000/ready | jq '.details.gpu'      # {tier, device, vram_gb, capability}
+```
+
+The console header (**GpuTierChip**) and **System** page show the same tier.
+
+**Override the tier** (e.g. force a smaller profile, or pin a tier the heuristics
+misread) by setting `GPU_PROFILE` in `.env` and restarting the worker:
+
+```bash
+# GPU_PROFILE=rtx5090   # cpu | t4_16gb | rtx_high | rtx5090 | datacenter
+docker compose up -d worker
+```
+
+> Invariant: embeddings are **BGE-M3 (1024-d) on every tier** (the DB is
+> `vector(1024)`); the worker fails fast at startup if `EMBED_DIM != 1024`.
+
 ## 4. First video (smoke on the real box)
 
 ```bash

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from katbook_vip.config import load_config
-from katbook_vip.router import SILENT, VOICE, decide
+from pipeline.config import load_config
+from pipeline.router import SILENT, VOICE, decide
 
 CFG = load_config({"PROFILE": "smoke"})
 

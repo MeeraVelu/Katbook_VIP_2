@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from katbook_vip import segment
-from katbook_vip.config import load_config
+from pipeline import segment
+from pipeline.config import load_config
 
 CFG = load_config({"PROFILE": "smoke"})
 

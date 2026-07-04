@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import pytest
 
-from katbook_vip.config import load_config
-from katbook_vip.settings import PROFILES, Settings
+from pipeline.config import load_config
+from pipeline.settings import PROFILES, Settings
 
 REQUIRED_KEYS = {
     "WHISPER_MODEL",

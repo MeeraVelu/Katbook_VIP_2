@@ -2,7 +2,7 @@
 config.py — public configuration surface for the pipeline.
 
 Historically this module *was* the config (a hand-rolled ``BASE`` dict + profile
-dicts). It is now a thin compatibility shim over :mod:`katbook_vip.settings`
+dicts). It is now a thin compatibility shim over :mod:`pipeline.settings`
 (pydantic-settings), so:
 
 * every existing env var name (``KVIP_*``, ``DATABASE_URL``, ...) keeps working;

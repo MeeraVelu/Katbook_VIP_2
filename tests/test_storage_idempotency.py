@@ -29,7 +29,7 @@ if not TEST_URL:
         "set KVIP_TEST_DATABASE_URL to run storage integration tests", allow_module_level=True
     )
 
-from katbook_vip.storage import (  # noqa: E402
+from pipeline.storage import (  # noqa: E402
     find_canonical_by_hash,
     make_engine,
     normalize_db_url,
@@ -42,9 +42,8 @@ from katbook_vip.storage import (  # noqa: E402
 def engine():
     os.environ["DATABASE_URL"] = TEST_URL
     os.environ.setdefault("KVIP_EMBED_DIM", "1024")
-    from alembic.config import Config
-
     from alembic import command
+    from alembic.config import Config
 
     cfg = Config("alembic.ini")
     command.downgrade(cfg, "base")

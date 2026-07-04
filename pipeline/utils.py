@@ -31,7 +31,7 @@ _LEVELS = {"DEBUG": 10, "INFO": 20, "WARN": 30, "WARNING": 30, "ERROR": 40, "CRI
 def log(msg: str, level: str = "INFO") -> None:
     from .logging_config import get_logger
 
-    get_logger("katbook_vip.pipeline").log(_LEVELS.get(level.upper(), 20), msg)
+    get_logger("pipeline.pipeline").log(_LEVELS.get(level.upper(), 20), msg)
 
 
 # --------------------------------------------------------------------------- #

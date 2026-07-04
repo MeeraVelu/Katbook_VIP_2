@@ -5,9 +5,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from katbook_vip import tagging
-from katbook_vip.config import load_config
-from katbook_vip.llm_backend import StubBackend, get_backend
+from pipeline import tagging
+from pipeline.config import load_config
+from pipeline.llm_backend import StubBackend, get_backend
 
 CFG = load_config({"PROFILE": "smoke"})  # TAGGING_BACKEND=stub
 

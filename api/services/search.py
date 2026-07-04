@@ -1,5 +1,5 @@
 """
-app/services/search.py — semantic / keyword / hybrid search (ports search.py).
+api/services/search.py — semantic / keyword / hybrid search (ports search.py).
 
 Modes:
   * ``semantic`` — pgvector cosine (``embedding <=> qv``) over segment embeddings.
@@ -18,7 +18,7 @@ from __future__ import annotations
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.settings import get_api_settings
+from api.settings import get_api_settings
 
 RRF_K = 60  # standard Reciprocal Rank Fusion constant
 

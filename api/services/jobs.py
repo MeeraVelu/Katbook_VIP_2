@@ -1,5 +1,5 @@
 """
-app/services/jobs.py — job lifecycle helpers, shared by the API (reads) and the
+api/services/jobs.py — job lifecycle helpers, shared by the API (reads) and the
 worker (writes). A ``job`` row is the user-visible unit of work behind a video;
 the worker advances ``state``/``current_stage``/``stage_timings`` so
 ``GET /api/v1/jobs/{id}`` reflects live progress.
@@ -13,7 +13,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.services.models import Job
+from api.services.models import Job
 
 
 def _now() -> dt.datetime:

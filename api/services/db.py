@@ -1,8 +1,8 @@
 """
-app/services/db.py — SQLAlchemy 2.0 engine + session factory.
+api/services/db.py — SQLAlchemy 2.0 engine + session factory.
 
 One engine per process, with pool sizing / pre-ping / a server-side statement
-timeout all driven by env (see app.settings). The same helpers are imported by
+timeout all driven by env (see api.settings). The same helpers are imported by
 the Celery worker so both processes share connection discipline.
 """
 
@@ -15,8 +15,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.settings import get_api_settings
-from katbook_vip.storage import normalize_db_url
+from api.settings import get_api_settings
+from pipeline.storage import normalize_db_url
 
 _engine: Engine | None = None
 _Session: sessionmaker[Session] | None = None

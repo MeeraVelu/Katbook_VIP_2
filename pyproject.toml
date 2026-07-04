@@ -37,12 +37,12 @@ dev = [
 katbook = "scripts.cli:app"
 
 [tool.setuptools]
-packages = ["katbook_vip", "app", "app.routers", "app.schemas", "app.services", "worker"]
+packages = ["pipeline", "api", "api.routers", "api.schemas", "api.services", "worker"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = [".venv", "legacy", "alembic/versions", "results", "build", "dist"]
+extend-exclude = [".venv", "legacy", "database/versions", "results", "build", "dist"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "W", "C4"]
@@ -59,7 +59,7 @@ quote-style = "double"
 
 [tool.mypy]
 python_version = "3.11"
-files = ["app"]
+files = ["api"]
 ignore_missing_imports = true
 warn_unused_ignores = false
 disallow_untyped_defs = false

@@ -1,5 +1,5 @@
 """
-app/services/queue.py — enqueue work onto Celery/Redis from the API.
+api/services/queue.py — enqueue work onto Celery/Redis from the API.
 
 The API must stay ML-free, so it never imports ``worker.tasks`` (which pulls in
 torch). Instead it holds a bare Celery client and sends the task **by name**; the
@@ -13,7 +13,7 @@ import uuid
 
 from celery import Celery
 
-from app.settings import get_api_settings
+from api.settings import get_api_settings
 
 _app: Celery | None = None
 

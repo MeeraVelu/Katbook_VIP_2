@@ -10,7 +10,7 @@ help:
 	@echo "  install-dev  install dev + api deps (CPU) into the current env"
 	@echo "  lint         ruff check"
 	@echo "  format       ruff format"
-	@echo "  typecheck    mypy app/"
+	@echo "  typecheck    mypy api/"
 	@echo "  test         pytest (CPU, models mocked)"
 	@echo "  smoke        full pipeline on a generated 10s clip (CPU, no GPU, no DB)"
 	@echo "  migrate      alembic upgrade head (needs DATABASE_URL)"

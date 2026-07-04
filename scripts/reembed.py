@@ -21,7 +21,7 @@ import os
 
 from sqlalchemy import create_engine, text
 
-from katbook_vip.storage import normalize_db_url
+from pipeline.storage import normalize_db_url
 
 
 def _vec_literal(vec) -> str:

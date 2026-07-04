@@ -1,14 +1,14 @@
-"""app/routers/search.py — semantic / keyword / hybrid search over segments."""
+"""api/routers/search.py — semantic / keyword / hybrid search over segments."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.deps import db_session, require_api_key, settings_dep
-from app.schemas.search import SearchHit, SearchMode, SearchResponse
-from app.services import search as svc
-from app.settings import APISettings
+from api.deps import db_session, require_api_key, settings_dep
+from api.schemas.search import SearchHit, SearchMode, SearchResponse
+from api.services import search as svc
+from api.settings import APISettings
 
 router = APIRouter(
     prefix="/api/v1/search", tags=["search"], dependencies=[Depends(require_api_key)]

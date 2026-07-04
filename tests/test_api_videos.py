@@ -57,7 +57,7 @@ def test_register_video_returns_job(client, monkeypatch):
     vid = uuid.uuid4()
     job = uuid.uuid4()
     monkeypatch.setattr(
-        "app.services.videos.register_video",
+        "api.services.videos.register_video",
         lambda db, sp, force=False: {
             "job_id": job,
             "video_id": vid,
@@ -81,7 +81,7 @@ def test_register_video_returns_job(client, monkeypatch):
 def test_register_exact_duplicate(client, monkeypatch):
     vid, canon = uuid.uuid4(), uuid.uuid4()
     monkeypatch.setattr(
-        "app.services.videos.register_video",
+        "api.services.videos.register_video",
         lambda db, sp, force=False: {
             "job_id": None,
             "video_id": vid,
@@ -102,8 +102,8 @@ def test_register_exact_duplicate(client, monkeypatch):
 
 
 def test_list_videos_paginated(client, monkeypatch):
-    monkeypatch.setattr("app.services.videos.list_videos", lambda db, **k: ([_video()], 1))
-    monkeypatch.setattr("app.services.videos.segment_count", lambda db, vid: 3)
+    monkeypatch.setattr("api.services.videos.list_videos", lambda db, **k: ([_video()], 1))
+    monkeypatch.setattr("api.services.videos.segment_count", lambda db, vid: 3)
     r = client.get("/api/v1/videos?page=1&page_size=10&subject=Mathematics")
     assert r.status_code == 200
     body = r.json()
@@ -113,7 +113,7 @@ def test_list_videos_paginated(client, monkeypatch):
 
 def test_get_video_detail(client, monkeypatch):
     v = _video(segments=[_segment()])
-    monkeypatch.setattr("app.services.videos.get_video", lambda db, vid: v)
+    monkeypatch.setattr("api.services.videos.get_video", lambda db, vid: v)
     r = client.get(f"/api/v1/videos/{v.video_id}")
     assert r.status_code == 200
     body = r.json()
@@ -122,7 +122,7 @@ def test_get_video_detail(client, monkeypatch):
 
 
 def test_get_video_not_found(client, monkeypatch):
-    monkeypatch.setattr("app.services.videos.get_video", lambda db, vid: None)
+    monkeypatch.setattr("api.services.videos.get_video", lambda db, vid: None)
     r = client.get(f"/api/v1/videos/{uuid.uuid4()}")
     assert r.status_code == 404
     assert r.json()["error"]["code"] == "not_found"
@@ -131,7 +131,7 @@ def test_get_video_not_found(client, monkeypatch):
 
 def test_soft_delete(client, monkeypatch):
     v = _video(status="soft_deleted")
-    monkeypatch.setattr("app.services.videos.soft_delete", lambda db, vid: v)
+    monkeypatch.setattr("api.services.videos.soft_delete", lambda db, vid: v)
     r = client.delete(f"/api/v1/videos/{v.video_id}")
     assert r.status_code == 200
     assert r.json()["status"] == "soft_deleted"
@@ -139,7 +139,7 @@ def test_soft_delete(client, monkeypatch):
 
 def test_batch_enqueue(client, monkeypatch):
     monkeypatch.setattr(
-        "app.services.videos.register_batch",
+        "api.services.videos.register_batch",
         lambda db, g, f, force=False: {
             "enqueued": 2,
             "duplicates": 0,

@@ -1,7 +1,7 @@
 """
-app/settings.py — configuration for the API service (pydantic-settings).
+api/settings.py — configuration for the API service (pydantic-settings).
 
-Kept separate from the pipeline's :mod:`katbook_vip.settings`: the API is a thin,
+Kept separate from the pipeline's :mod:`pipeline.settings`: the API is a thin,
 ML-free process, so it only needs DB/Redis/auth/CORS knobs. Every value comes from
 the environment; secrets are never hard-coded.
 """

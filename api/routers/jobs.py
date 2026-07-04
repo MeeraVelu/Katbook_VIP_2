@@ -1,4 +1,4 @@
-"""app/routers/jobs.py — job status (live stage + timings)."""
+"""api/routers/jobs.py — job status (live stage + timings)."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ import uuid
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.deps import db_session, require_api_key
-from app.schemas.jobs import JobStatus
-from app.services import jobs as svc
-from app.services.videos import VideoError
+from api.deps import db_session, require_api_key
+from api.schemas.jobs import JobStatus
+from api.services import jobs as svc
+from api.services.videos import VideoError
 
 router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"], dependencies=[Depends(require_api_key)])
 

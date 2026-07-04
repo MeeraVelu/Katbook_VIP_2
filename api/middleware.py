@@ -1,5 +1,5 @@
 """
-app/middleware.py — request-ID + structured access logging.
+api/middleware.py — request-ID + structured access logging.
 
 Assigns (or propagates) an ``X-Request-ID`` per request, binds it into the
 logging context so every downstream log line carries it, echoes it back in the
@@ -14,9 +14,9 @@ import uuid
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
-from katbook_vip.logging_config import bind, clear_context, get_logger
+from pipeline.logging_config import bind, clear_context, get_logger
 
-_log = get_logger("app.access")
+_log = get_logger("api.access")
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):

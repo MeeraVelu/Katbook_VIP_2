@@ -35,7 +35,7 @@ flowchart LR
   registers videos (with the SHA-256 dedup pre-check), enqueues jobs, reads status
   and search results.
 - **worker** — Celery consumer on the `gpu` queue, concurrency 1 per GPU. Imports
-  `katbook_vip` and runs `process_one_video` per task, reporting each stage to the
+  `pipeline` and runs `process_one_video` per task, reporting each stage to the
   job row. Transient failures retry with backoff; poison inputs fail fast. Adding
   a second 5090 = another worker with `CUDA_VISIBLE_DEVICES=1`.
 - **vllm** — OpenAI-compatible server for the tagging LLM (Qwen2.5-7B-Instruct,

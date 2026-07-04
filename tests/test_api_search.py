@@ -20,7 +20,7 @@ def test_search_endpoint_shape(client, monkeypatch):
         "score": 0.87,
     }
     monkeypatch.setattr(
-        "app.services.search.search", lambda db, q, mode, limit: ("semantic", [hit])
+        "api.services.search.search", lambda db, q, mode, limit: ("semantic", [hit])
     )
     r = client.get("/api/v1/search?q=pendulum&mode=semantic&limit=5")
     assert r.status_code == 200
@@ -31,7 +31,7 @@ def test_search_endpoint_shape(client, monkeypatch):
 
 def test_search_degrades_to_keyword(client, monkeypatch):
     # semantic requested but embeddings unavailable -> service returns keyword
-    monkeypatch.setattr("app.services.search.search", lambda db, q, mode, limit: ("keyword", []))
+    monkeypatch.setattr("api.services.search.search", lambda db, q, mode, limit: ("keyword", []))
     r = client.get("/api/v1/search?q=oscillation&mode=semantic")
     assert r.status_code == 200
     assert r.json()["mode"] == "keyword"
@@ -45,7 +45,7 @@ def test_search_requires_query(client):
 def test_rrf_fusion_ranks_common_hits_higher(monkeypatch):
     """hybrid_search fuses semantic+keyword via RRF; an item ranked well in BOTH
     lists should beat items in only one."""
-    from app.services import search as svc
+    from api.services import search as svc
 
     def row(vid, seg):
         return SimpleNamespace(

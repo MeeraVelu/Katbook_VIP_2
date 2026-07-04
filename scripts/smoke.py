@@ -31,8 +31,8 @@ sys.path.insert(0, str(ROOT))
 
 
 def main() -> int:
-    from katbook_vip import load_config, process_one_video
-    from katbook_vip.logging_config import configure_logging
+    from pipeline import load_config, process_one_video
+    from pipeline.logging_config import configure_logging
     from scripts.make_test_video import make_test_video
 
     configure_logging()

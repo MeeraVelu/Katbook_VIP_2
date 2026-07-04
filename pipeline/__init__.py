@@ -6,7 +6,7 @@ grade, difficulty, tags, summary + embeddings), stored in Postgres and queryable
 by meaning or keyword. Runs on a free Kaggle T4, one model in VRAM at a time, and
 handles BOTH narrated and silent videos in ANY language.
 
-    from katbook_vip import run_batch, load_config
+    from pipeline import run_batch, load_config
     run_batch(load_config({"PROCESS": "all", "PROFILE": "fast"}))
 """
 

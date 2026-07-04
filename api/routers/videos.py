@@ -1,5 +1,5 @@
 """
-app/routers/videos.py — register / list / detail / soft-delete video endpoints.
+api/routers/videos.py — register / list / detail / soft-delete video endpoints.
 
 POST accepts a **server filesystem path** (JSON) or a **multipart upload** to the
 watched inbox; both run the SHA-256 dedup pre-check before enqueueing. All GPU
@@ -16,9 +16,9 @@ from collections import Counter
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
 
-from app.deps import db_session, require_api_key, settings_dep
-from app.schemas.common import Page
-from app.schemas.videos import (
+from api.deps import db_session, require_api_key, settings_dep
+from api.schemas.common import Page
+from api.schemas.videos import (
     BatchRequest,
     BatchResponse,
     RegisterVideoRequest,
@@ -29,9 +29,9 @@ from app.schemas.videos import (
     VideoRollup,
     VideoSummary,
 )
-from app.services import videos as svc
-from app.services.models import Segment, Video
-from app.settings import APISettings
+from api.services import videos as svc
+from api.services.models import Segment, Video
+from api.settings import APISettings
 
 router = APIRouter(
     prefix="/api/v1/videos", tags=["videos"], dependencies=[Depends(require_api_key)]

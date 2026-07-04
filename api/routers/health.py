@@ -1,5 +1,5 @@
 """
-app/routers/health.py — liveness (/health) and readiness (/ready).
+api/routers/health.py — liveness (/health) and readiness (/ready).
 
 ``/health`` is a cheap liveness probe (process is up). ``/ready`` verifies the
 service can actually do work: Postgres reachable, Redis reachable, and — because
@@ -15,9 +15,9 @@ import time
 from fastapi import APIRouter, Response
 from sqlalchemy import text
 
-from app import __version__
-from app.schemas.common import HealthResponse, ReadyResponse
-from app.settings import get_api_settings
+from api import __version__
+from api.schemas.common import HealthResponse, ReadyResponse
+from api.settings import get_api_settings
 
 router = APIRouter(tags=["health"])
 
@@ -38,7 +38,7 @@ def ready(response: Response) -> ReadyResponse:
 
     # Postgres
     try:
-        from app.services.db import get_engine
+        from api.services.db import get_engine
 
         with get_engine().connect() as cx:
             cx.execute(text("SELECT 1"))

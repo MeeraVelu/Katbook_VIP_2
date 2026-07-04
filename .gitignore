@@ -33,3 +33,6 @@ models/
 
 # debug: downloaded kaggle kernel output
 _kaggle_out/
+
+# build artifacts / deliverables
+*.zip

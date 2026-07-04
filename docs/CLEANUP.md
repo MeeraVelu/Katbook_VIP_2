@@ -19,9 +19,9 @@ No source packages move; no imports change.
 | **DELETE** | `setup.py` | Only self-reference (`setup()`); `pyproject.toml` is the authoritative build (`[build-system]` + `[project]`). `pip install -e .` uses PEP 660 via setuptools. |
 | **CONSOLIDATE** | `requirements/{base,api,worker,dev,local}.txt` → **`requirements.txt`** (API image) + **`requirements-worker.txt`** (worker image) | Only referenced by `Dockerfile.api` (api.txt), `Dockerfile.worker` (worker.txt), `Makefile` + `README` (dev.txt). All 4 references updated. Dev/CLI tooling moves to `pyproject [project.optional-dependencies].dev`. |
 | **MOVE** | `PLAN.md` → `docs/PLAN.md`; `CLEANUP.md` → `docs/CLEANUP.md` | No code/config references either (grep = 0). Doc-only. |
-| **ADD** | one-line `README.md` in `app/ katbook_vip/ worker/ alembic/ docker/ scripts/ tests/ docs/` | `ui/` + `legacy/` already have one. Additive, zero risk. |
+| **ADD** | one-line `README.md` in `api/ pipeline/ worker/ database/ docker/ scripts/ tests/ docs/` | `ui/` + `legacy/` already have one. Additive, zero risk. |
 | **UPDATE refs** | `docker/Dockerfile.api`, `docker/Dockerfile.worker`, `Makefile`, `README.md`, `docs/PLAN.md` | Repoint requirements paths; `make install-dev` → `pip install -e ".[dev]"`. |
-| **KEEP (no change)** | everything else (all of `app/ katbook_vip/ worker/ ui/ alembic/ docker/ scripts/ tests/ docs/ legacy/` + root entry-points) | Referenced / in correct domain folder. |
+| **KEEP (no change)** | everything else (all of `api/ pipeline/ worker/ ui/ database/ docker/ scripts/ tests/ docs/ legacy/` + root entry-points) | Referenced / in correct domain folder. |
 | **FLAG, no git action** | `db_url.txt` (SECRET) | Already **untracked + gitignored** (line 2), 118 B on disk = your live DB URL. `git rm` can't touch an untracked file; deleting the local file would destroy your credential. **Recommend: leave it (out of repo already).** Your call. |
 
 Target requirements scheme after consolidation:
@@ -62,25 +62,25 @@ Target requirements scheme after consolidation:
 | `requirements/dev.txt` | NEEDED | `Makefile`, `README` | → `pyproject [dev]` |
 | `requirements/local.txt` | ORPHAN | referenced by nothing active (only concept in README) | drop (typer/httpx covered by `[dev]`) |
 
-### `app/` — API domain (NEEDED, keep)
+### `api/` — API domain (NEEDED, keep)
 `__init__.py, deps.py, errors.py, main.py, middleware.py, settings.py, routers/{__init__,health,jobs,search,videos}.py, schemas/{__init__,common,jobs,search,videos}.py, services/{__init__,db,jobs,models,queue,search,videos}.py`
-→ imported across the FastAPI app + `worker/`; `uvicorn app.main:app` in `Dockerfile.api`. **Keep.** Add `app/README.md`.
+→ imported across the FastAPI app + `worker/`; `uvicorn api.main:app` in `Dockerfile.api`. **Keep.** Add `api/README.md`.
 
-### `katbook_vip/` — pipeline domain (NEEDED, keep)
+### `pipeline/` — pipeline domain (NEEDED, keep)
 `__init__.py, __main__.py, audio.py, config.py, export.py, ingest.py, llm_backend.py, logging_config.py, nlp_stage.py, pipeline.py, router.py, run.py, segment.py, settings.py, storage.py, tagging.py, utils.py, visual.py`
-→ imported by `worker/tasks.py`, `app/services`, `scripts/`, `tests/`; `__main__.py` = `python -m katbook_vip` batch entry. **Keep.** Add `katbook_vip/README.md`.
+→ imported by `worker/tasks.py`, `api/services`, `scripts/`, `tests/`; `__main__.py` = `python -m pipeline` batch entry. **Keep.** Add `pipeline/README.md`.
 
 ### `worker/` — jobs domain (NEEDED, keep)
 `__init__.py, celery_app.py, heartbeat.py, progress.py, tasks.py`
-→ `celery -A worker.celery_app` in `entrypoint-worker.sh`; queue task name in `app/settings`. **Keep.** Add `worker/README.md`.
+→ `celery -A worker.celery_app` in `entrypoint-worker.sh`; queue task name in `api/settings`. **Keep.** Add `worker/README.md`.
 
 ### `ui/` — UI domain (NEEDED, keep)
 `index.html, app.js, styles.css, README.md`
 → `Dockerfile.ui` copies `ui/`; compose `ui` service. **Keep** (already has README).
 
-### `alembic/` — database domain (NEEDED, keep)
+### `database/` — database domain (NEEDED, keep)
 `env.py, script.py.mako, versions/0001_initial_schema.py`
-→ `alembic.ini` `script_location=alembic`; `env.py` imports `katbook_vip.storage`; `script.py.mako` is the revision template; migration run by compose `migrate`. **Keep.** Add `alembic/README.md`.
+→ `alembic.ini` `script_location=alembic`; `env.py` imports `pipeline.storage`; `script.py.mako` is the revision template; migration run by compose `migrate`. **Keep.** Add `database/README.md`.
 
 ### `docker/` — docker domain (NEEDED, keep)
 `Dockerfile.api, Dockerfile.worker, Dockerfile.ui, entrypoint-worker.sh, healthcheck.py`
@@ -99,7 +99,7 @@ Target requirements scheme after consolidation:
 → linked from `README.md` + cross-linked. **Keep.** Add `docs/README.md` (index). PLAN.md + CLEANUP.md land here.
 
 ### `legacy/` — LEGACY (keep in legacy/)
-`README.md, OPERATIONS.md, kaggle_run.py, katbook_vip_kaggle.ipynb, kernel-metadata.json, requirements-local.txt, search.py, sync_results.py`
+`README.md, OPERATIONS.md, kaggle_run.py, pipeline_kaggle.ipynb, kernel-metadata.json, requirements-local.txt, search.py, sync_results.py`
 → self-contained Kaggle POC; only referenced within `legacy/`. **Keep as-is** (already isolated).
 
 ### Untracked (for reference — not in `git ls-files`)

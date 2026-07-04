@@ -6,13 +6,12 @@ from __future__ import annotations
 import os
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
-
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 
 # Reuse the pipeline's URL normalizer so `postgres://` / `postgresql://` from a
 # managed provider become `postgresql+psycopg://`.
-from katbook_vip.storage import normalize_db_url
+from pipeline.storage import normalize_db_url
 
 config = context.config
 

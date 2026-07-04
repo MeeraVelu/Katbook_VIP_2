@@ -1,5 +1,5 @@
 """
-app/deps.py — FastAPI dependencies: DB session, API-key auth, request id.
+api/deps.py — FastAPI dependencies: DB session, API-key auth, request id.
 
 Auth is a simple ``X-API-Key`` header check against ``API_KEY`` (this is an
 internal service). If ``API_KEY`` is unset, auth is disabled (useful for local
@@ -11,9 +11,9 @@ from __future__ import annotations
 from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.services.db import get_db
-from app.settings import APISettings, get_api_settings
-from katbook_vip.logging_config import get_logger
+from api.services.db import get_db
+from api.settings import APISettings, get_api_settings
+from pipeline.logging_config import get_logger
 
 _warned = False
 
@@ -33,7 +33,7 @@ async def require_api_key(
     global _warned
     if not settings.api_key:
         if not _warned:
-            get_logger("app.auth").warning("API_KEY not set — authentication is DISABLED")
+            get_logger("api.auth").warning("API_KEY not set — authentication is DISABLED")
             _warned = True
         return
     if x_api_key != settings.api_key:

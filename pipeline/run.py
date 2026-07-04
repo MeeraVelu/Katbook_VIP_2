@@ -3,12 +3,12 @@ run.py — the entry point. Discover videos, apply the selection rule, load the
 shared small models once (embedder + spaCy), then process the selected videos in
 a loop where ONE video failing never kills the batch.
 
-    from katbook_vip import run_batch, load_config
+    from pipeline import run_batch, load_config
     run_batch(load_config({"PROCESS": "all", "PROFILE": "fast"}))
 
 or from the command line:
 
-    python -m katbook_vip --process all --profile fast
+    python -m pipeline --process all --profile fast
 """
 
 from __future__ import annotations

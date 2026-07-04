@@ -4,7 +4,7 @@ PostgreSQL 16 + [pgvector](https://github.com/pgvector/pgvector) is the single
 datastore: relational (`videos` → `segments` → `jobs`), semantic search (pgvector
 cosine), keyword search (tsvector FTS), and exact-duplicate lookups all live in
 **one** engine. Image: `pgvector/pgvector:pg16`. Schema is owned by **Alembic**
-(`alembic/versions/0001_initial_schema.py`) — no runtime `CREATE TABLE`.
+(`database/versions/0001_initial_schema.py`) — no runtime `CREATE TABLE`.
 
 ## Why Postgres + pgvector (not a dedicated vector DB)
 

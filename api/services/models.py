@@ -1,7 +1,7 @@
 """
-app/services/models.py — SQLAlchemy 2.0 ORM models mirroring the Alembic schema.
+api/services/models.py — SQLAlchemy 2.0 ORM models mirroring the Alembic schema.
 
-The schema is *owned* by Alembic (``alembic/versions``); these classes are the
+The schema is *owned* by Alembic (``database/versions``); these classes are the
 read/write mapping the API and worker use. The generated ``fts`` column and the
 ``embedding`` vector are declared read-only here (populated by SQL / the pipeline)
 so ORM flushes never try to write them.
@@ -27,7 +27,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from app.settings import get_api_settings
+from api.settings import get_api_settings
 
 
 class Base(DeclarativeBase):

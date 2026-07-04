@@ -8,8 +8,8 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 
-from app.services import jobs as jobs_svc
-from app.services.db import session_scope
+from api.services import jobs as jobs_svc
+from api.services.db import session_scope
 
 
 def make_progress(job_id: uuid.UUID) -> Callable[[str, dict], None]:

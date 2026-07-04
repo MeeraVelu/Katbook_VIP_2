@@ -7,7 +7,7 @@ in the worker). This replaces the POC's ad-hoc ``print`` in ``utils.log`` while
 keeping that call site working (``utils.log`` now delegates here).
 
 Usage:
-    from katbook_vip.logging_config import configure_logging, bind, get_logger
+    from pipeline.logging_config import configure_logging, bind, get_logger
     configure_logging()                       # once, at process start
     bind(video_id="ab12", stage="visual")     # context for subsequent logs
     get_logger(__name__).info("frames extracted", extra={"count": 12})
@@ -109,7 +109,7 @@ def configure_logging(level: str | None = None, fmt: str | None = None) -> None:
     _CONFIGURED = True
 
 
-def get_logger(name: str = "katbook_vip") -> logging.Logger:
+def get_logger(name: str = "pipeline") -> logging.Logger:
     if not _CONFIGURED:
         configure_logging()
     return logging.getLogger(name)

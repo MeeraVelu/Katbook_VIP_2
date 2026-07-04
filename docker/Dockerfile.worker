@@ -46,8 +46,8 @@ RUN groupadd --gid 10001 katbook \
     && chown -R katbook:katbook /models /data
 
 WORKDIR /app
-COPY katbook_vip/ katbook_vip/
-COPY app/ app/
+COPY pipeline/ pipeline/
+COPY api/ api/
 COPY worker/ worker/
 COPY scripts/ scripts/
 COPY docker/ docker/

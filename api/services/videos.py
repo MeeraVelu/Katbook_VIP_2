@@ -1,5 +1,5 @@
 """
-app/services/videos.py — business logic for the videos endpoints.
+api/services/videos.py — business logic for the videos endpoints.
 
 Responsibilities:
   * Deterministic ``video_id = uuid5(URL, source_path)`` (matches the pipeline).
@@ -20,10 +20,10 @@ import uuid
 from sqlalchemy import Select, func, select, text
 from sqlalchemy.orm import Session
 
-from app.services import jobs as jobs_svc
-from app.services.models import Segment, Video
-from app.services.queue import enqueue_video
-from katbook_vip.ingest import file_sha256, file_size_bytes
+from api.services import jobs as jobs_svc
+from api.services.models import Segment, Video
+from api.services.queue import enqueue_video
+from pipeline.ingest import file_sha256, file_size_bytes
 
 NAMESPACE = uuid.NAMESPACE_URL
 VIDEO_EXTS = ("mp4", "webm", "mov", "mkv", "avi", "m4v")

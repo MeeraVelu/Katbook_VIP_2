@@ -2,7 +2,7 @@
 storage.py — Stage 6. Persist results to Postgres (the single source of truth).
 
 Production changes vs the POC:
-  * **No inline DDL.** The schema is owned by Alembic (``alembic/versions``); this
+  * **No inline DDL.** The schema is owned by Alembic (``database/versions``); this
     module assumes it exists. (The POC's ``CREATE TABLE IF NOT EXISTS`` /
     ``ADD COLUMN`` calls are gone.)
   * **Structured segment columns.** The per-segment LLM JSON is projected into

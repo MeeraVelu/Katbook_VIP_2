@@ -16,7 +16,7 @@ import os
 
 from celery import Celery
 
-from app.settings import get_api_settings
+from api.settings import get_api_settings
 
 _s = get_api_settings()
 

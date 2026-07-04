@@ -16,7 +16,7 @@ import time
 
 from celery.signals import worker_process_init, worker_ready
 
-from katbook_vip.logging_config import configure_logging, get_logger
+from pipeline.logging_config import configure_logging, get_logger
 
 HEARTBEAT_KEY = "katbook:worker:heartbeat"
 HEARTBEAT_INFO_KEY = "katbook:worker:info"
@@ -46,7 +46,7 @@ def _gpu_info() -> dict:
 def _redis():
     import redis
 
-    from app.settings import get_api_settings
+    from api.settings import get_api_settings
 
     return redis.Redis.from_url(get_api_settings().redis_url)
 

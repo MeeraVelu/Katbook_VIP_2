@@ -1,5 +1,5 @@
 """
-app/main.py — FastAPI application factory.
+api/main.py — FastAPI application factory.
 
 Wires middleware (request-id + access logging), CORS (env-configured for the
 frontend origin), the consistent error envelope, the versioned routers, and the
@@ -12,12 +12,12 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app import __version__
-from app.errors import register_exception_handlers
-from app.middleware import RequestContextMiddleware
-from app.routers import health, jobs, search, videos
-from app.settings import get_api_settings
-from katbook_vip.logging_config import configure_logging
+from api import __version__
+from api.errors import register_exception_handlers
+from api.middleware import RequestContextMiddleware
+from api.routers import health, jobs, search, videos
+from api.settings import get_api_settings
+from pipeline.logging_config import configure_logging
 
 
 def create_app() -> FastAPI:

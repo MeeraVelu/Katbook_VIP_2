@@ -1,7 +1,7 @@
 """
 worker/tasks.py — the Celery tasks that run the pipeline.
 
-``process_video`` runs ONE video end-to-end via ``katbook_vip.process_one_video``:
+``process_video`` runs ONE video end-to-end via ``pipeline.process_one_video``:
   * shared small models (embedder + spaCy) are loaded ONCE per worker process and
     reused across tasks (the heavy per-stage models are managed inside the
     pipeline, one in VRAM at a time);
@@ -21,11 +21,11 @@ from celery import shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from sqlalchemy import text
 
-from app.services import jobs as jobs_svc
-from app.services.db import get_engine, session_scope
-from katbook_vip.config import load_config
-from katbook_vip.logging_config import bind, configure_logging, get_logger
-from katbook_vip.pipeline import process_one_video
+from api.services import jobs as jobs_svc
+from api.services.db import get_engine, session_scope
+from pipeline.config import load_config
+from pipeline.logging_config import bind, configure_logging, get_logger
+from pipeline.pipeline import process_one_video
 from worker.progress import make_progress
 
 _log = get_logger("worker.tasks")
@@ -156,7 +156,7 @@ def process_batch(
     """Discover a folder/glob and enqueue one ``process_video`` per file, reusing
     the API's registration/dedup logic. Lets the CLI kick off the 95k backlog
     without going through HTTP."""
-    from app.services import videos as vsvc
+    from api.services import videos as vsvc
 
     with session_scope() as s:
         result = vsvc.register_batch(s, glob_pat, folder, force=force)

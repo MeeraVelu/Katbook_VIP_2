@@ -25,21 +25,21 @@ Root holds only tooling entry-points; everything else is grouped by domain (each
 folder has its own one-line `README.md`).
 
 ```
-app/                        API domain — FastAPI service (routers/schemas/services), no ML, no UI
-katbook_vip/                pipeline domain — router, ingest, audio, visual, nlp, segment, tagging, storage
-worker/                     jobs domain — Celery worker (one video per task, per-stage progress)
-ui/                         UI domain — static operator console (vanilla HTML/JS, no build) via nginx
-alembic/                    database domain — schema migrations (owns the schema)
-docker/                     container domain — Dockerfile.api/.worker/.ui + entrypoint/healthcheck
-scripts/                    ops CLIs — cli, verify_gpu, smoke, reembed, backup, export_tensorrt, make_test_video
-tests/                      pytest suite (CPU, models mocked)
-docs/                       DEPLOYMENT · API · DATABASE · ARCHITECTURE · PLAN · CLEANUP
-legacy/                     retired Kaggle POC (notebook, kaggle_run, sync/search scripts)
+api/         API domain — FastAPI service (routers/schemas/services), no ML, no UI
+pipeline/    pipeline domain — router, ingest, audio, visual, nlp, segment, tagging, storage
+worker/      jobs domain — Celery worker (one video per task, per-stage progress)
+ui/          UI domain — static operator console (vanilla HTML/JS, no build) via nginx
+database/    database domain — Alembic schema migrations (owns the schema)
+docker/      container domain — Dockerfile.api/.worker/.ui + entrypoint/healthcheck
+scripts/     ops CLIs — cli, verify_gpu, smoke, reembed, backup, export_tensorrt, make_test_video
+tests/       pytest suite (CPU, models mocked)
+docs/        DEPLOYMENT · API · DATABASE · ARCHITECTURE · PLAN · CLEANUP
+legacy/      retired Kaggle POC (notebook, kaggle_run, sync/search scripts)
 
-docker-compose.yml          production stack (8 services)
-docker-compose.override.dev.yml   CPU/dev override
-requirements.txt            API image deps         requirements-worker.txt   worker (GPU) image deps
-pyproject.toml              build + ruff/mypy/pytest config, dev extras ([dev])
+# root (tooling entry-points only)
+docker-compose.yml  docker-compose.override.dev.yml   # production stack (8 services) + CPU/dev override
+requirements.txt  requirements-worker.txt             # API image deps / worker (GPU) image deps
+pyproject.toml                                         # build + ruff/mypy/pytest config, dev extras ([dev])
 alembic.ini  Makefile  .env.example  .gitignore  .dockerignore  README.md
 ```
 

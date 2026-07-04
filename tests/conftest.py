@@ -33,11 +33,11 @@ def client(fake_session, monkeypatch):
     """FastAPI TestClient with DB + auth dependencies overridden and enqueue faked."""
     from fastapi.testclient import TestClient
 
-    from app.deps import db_session, require_api_key
-    from app.main import create_app
+    from api.deps import db_session, require_api_key
+    from api.main import create_app
 
     # never actually enqueue to Redis during tests
-    monkeypatch.setattr("app.services.videos.enqueue_video", lambda *a, **k: None)
+    monkeypatch.setattr("api.services.videos.enqueue_video", lambda *a, **k: None)
 
     app = create_app()
     app.dependency_overrides[db_session] = lambda: fake_session

@@ -26,8 +26,8 @@ def _job(**over):
 
 def test_get_job_status(client, monkeypatch):
     j = _job()
-    monkeypatch.setattr("app.services.jobs.get_job", lambda db, jid: j)
-    monkeypatch.setattr("app.services.jobs.elapsed_seconds", lambda job: 12.3)
+    monkeypatch.setattr("api.services.jobs.get_job", lambda db, jid: j)
+    monkeypatch.setattr("api.services.jobs.elapsed_seconds", lambda job: 12.3)
     r = client.get(f"/api/v1/jobs/{j.job_id}")
     assert r.status_code == 200
     body = r.json()
@@ -37,7 +37,7 @@ def test_get_job_status(client, monkeypatch):
 
 
 def test_get_job_not_found(client, monkeypatch):
-    monkeypatch.setattr("app.services.jobs.get_job", lambda db, jid: None)
+    monkeypatch.setattr("api.services.jobs.get_job", lambda db, jid: None)
     r = client.get(f"/api/v1/jobs/{uuid.uuid4()}")
     assert r.status_code == 404
 
@@ -47,14 +47,14 @@ def test_api_key_required_when_configured(fake_session, monkeypatch):
     correct key it passes auth."""
     from fastapi.testclient import TestClient
 
-    from app.deps import db_session, settings_dep
-    from app.main import create_app
-    from app.settings import APISettings
+    from api.deps import db_session, settings_dep
+    from api.main import create_app
+    from api.settings import APISettings
 
     app = create_app()
     app.dependency_overrides[db_session] = lambda: fake_session
     app.dependency_overrides[settings_dep] = lambda: APISettings(api_key="secret")
-    monkeypatch.setattr("app.services.jobs.get_job", lambda db, jid: None)
+    monkeypatch.setattr("api.services.jobs.get_job", lambda db, jid: None)
     tc = TestClient(app)
 
     jid = uuid.uuid4()

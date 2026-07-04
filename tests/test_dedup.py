@@ -8,8 +8,8 @@ uuid5(source_path), so re-registration is idempotent.
 
 from __future__ import annotations
 
-from app.services.videos import video_id_for
-from katbook_vip import ingest
+from api.services.videos import video_id_for
+from pipeline import ingest
 
 
 def _write(p, data: bytes):

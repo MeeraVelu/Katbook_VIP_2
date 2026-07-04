@@ -1,8 +1,8 @@
 """
-app/errors.py — consistent error envelope + exception handlers.
+api/errors.py — consistent error envelope + exception handlers.
 
 Every non-2xx response is ``{"error": {"code", "message", "request_id", "details"}}``
-(see :class:`app.schemas.common.ErrorResponse`). Handlers translate FastAPI/HTTP
+(see :class:`api.schemas.common.ErrorResponse`). Handlers translate FastAPI/HTTP
 errors, validation errors, the service-layer ``VideoError``, and any unhandled
 exception into that shape.
 """
@@ -14,8 +14,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.services.videos import VideoError
-from katbook_vip.logging_config import get_logger
+from api.services.videos import VideoError
+from pipeline.logging_config import get_logger
 
 _STATUS_CODE = {
     400: "bad_request",
@@ -49,7 +49,7 @@ def _envelope(
 
 
 def register_exception_handlers(app: FastAPI) -> None:
-    log = get_logger("app.errors")
+    log = get_logger("api.errors")
 
     @app.exception_handler(VideoError)
     async def _video_error(request: Request, exc: VideoError):

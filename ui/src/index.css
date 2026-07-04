@@ -1,0 +1,87 @@
+/* Self-hosted fonts (no runtime CDN). */
+@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/space-grotesk/600.css";
+@import "@fontsource/space-grotesk/700.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-ink text-fg font-sans antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  /* numbers, ids, hashes, timings render in tabular mono */
+  .num {
+    @apply font-mono tabular-nums;
+  }
+  ::selection {
+    background: rgba(245, 158, 11, 0.28);
+  }
+  /* accent focus ring for keyboard users */
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent/70 ring-offset-2 ring-offset-ink;
+  }
+  /* thin dark scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #232c3b transparent;
+  }
+  *::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: #232c3b;
+    border-radius: 8px;
+  }
+}
+
+@layer components {
+  /* subtle dot-grid texture for the app shell */
+  .dot-grid {
+    background-image: radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 22px 22px;
+    background-position: -1px -1px;
+  }
+  .panel {
+    @apply rounded-2xl border border-line bg-panel shadow-panel;
+  }
+  .panel-hover {
+    @apply transition-shadow duration-200 hover:shadow-glow;
+  }
+  .hairline {
+    @apply border-line;
+  }
+  /* skeleton shimmer */
+  .shimmer {
+    @apply relative overflow-hidden bg-panel2;
+  }
+  .shimmer::after {
+    content: "";
+    @apply absolute inset-0 -translate-x-full animate-shimmer;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+  }
+}
+
+/* honor reduced-motion: kill the pulse + shimmer */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-accent,
+  .animate-shimmer {
+    animation: none !important;
+  }
+}

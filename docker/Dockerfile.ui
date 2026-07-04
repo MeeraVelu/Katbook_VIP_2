@@ -1,11 +1,26 @@
 # syntax=docker/dockerfile:1
 # ---------------------------------------------------------------------------
-# UI image — static console (vanilla HTML/JS, no build step) served by nginx.
-# The API process itself still loads no UI; this is a separate static container
-# and the browser talks to the API directly over HTTP (CORS-configured).
+# UI image — React SPA built with Vite, served by nginx.
+#   stage 1: node:20-alpine  → tsc -b && vite build → /app/dist
+#   stage 2: nginx:alpine     → serve dist + reverse-proxy /api,/health,/ready
+# The API image gains ZERO UI code/deps; the browser talks to the API through
+# this container's same-origin proxy (see docker/nginx.conf).
 # ---------------------------------------------------------------------------
-FROM nginx:1.27-alpine
-COPY ui/ /usr/share/nginx/html/
+FROM node:20-alpine AS build
+WORKDIR /app
+
+# install deps first (better layer caching). No lockfile is committed, so the
+# exact pins in package.json resolve deterministically via `npm install`.
+COPY ui/package.json ./
+RUN npm install --no-audit --no-fund
+
+# build the SPA (tsc -b type-checks, then vite bundles to dist/)
+COPY ui/ ./
+RUN npm run build
+
+FROM nginx:alpine
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=4s --retries=3 \
     CMD wget -qO- http://localhost/ >/dev/null 2>&1 || exit 1

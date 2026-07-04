@@ -1,31 +1,49 @@
-# ui/ — Katbook VIP console
+# ui/ — Katbook VIP console (React SPA)
 
-A **self-contained, no-build** admin console (plain `index.html` + `app.js` +
-`styles.css`, zero dependencies) served as its own nginx container. It talks to
-the backend **only over the REST API** — the API process itself still loads no UI.
+The product's operator console: React 18 + TypeScript + Vite + Tailwind +
+@tanstack/react-query + react-router-dom + lucide-react. No component library, no
+CSS-in-JS. "Mission control" dark theme with one warm amber accent, muted cyan for
+semantic-search surfaces. Fonts are self-hosted (`@fontsource`), no runtime CDN.
 
-What it does:
-- **Videos** — paginated list with filters (subject / grade / language /
-  has_speech / status); click *View* for the full record + segments; soft-delete.
-- **Search** — semantic / keyword / hybrid over segments.
-- **Enqueue** — register a server path, upload a file, or enqueue a folder/glob.
-- **Jobs** — enter a `job_id` and watch the live stage + timings until done/failed.
+> This is the **default console**, not the only client. It talks to the backend
+> purely over the documented REST API (`docs/API.md`), so an external frontend can
+> replace it via the same API without touching the backend.
+
+## Pages & signature components
+- **Library** — filterable table → **VideoDetail** with the `SegmentTimeline`
+  (blocks by subject, height by confidence) + segment cards with `ConfidenceRing`.
+- **Search** — semantic / keyword / hybrid with fused-score bars (also via the
+  `CommandBar`: press **`/`** anywhere).
+- **Ingest** — upload / server-path / batch-glob → deep-links to the job.
+- **Jobs** — in-flight board + **JobDetail** with the `PipelineStepper` (live,
+  auto-polls until terminal).
+- **System** — `/health` + `/ready` per-check breakdown + `GpuTierChip` tier.
 
 ## Run it
 
-Via compose (default, http://localhost:8080):
+**Production (compose):** built by `docker/Dockerfile.ui` (node build → nginx) and
+served at **http://localhost:${UI_PORT:-8080}**. nginx reverse-proxies `/api/*`,
+`/health`, `/ready` to the `api` service **unchanged** (same-origin — no CORS), so
+the browser only talks to this origin.
 
 ```bash
 docker compose up -d ui
 ```
 
-Or open `index.html` directly in a browser during development. Either way, set the
-**API base URL** and **X-API-Key** in the top bar (persisted in `localStorage`).
+**Local dev:**
+```bash
+cd ui
+npm install
+npm run dev          # http://localhost:5173 ; vite proxies /api to VITE_API_TARGET
+# point at a running API (default http://localhost:8000):
+VITE_API_TARGET=http://localhost:8000 npm run dev
+```
 
-## Requirements
-- The API's `CORS_ORIGINS` must include this console's origin (e.g.
-  `http://localhost:8080`) — it's in `.env.example` by default.
-- If the API has `API_KEY` set, enter the same key in the console's top bar.
+## Auth
+Set the API key via the header key button (stored in `localStorage`, sent as
+`X-API-Key` on every request). Leave blank if the API has auth disabled.
 
-> This is an internal operator tool: the API key is stored client-side in
-> `localStorage`. Serve it on a trusted network / behind your own auth if exposed.
+## Boundaries
+- The API image contains **zero** UI code/deps.
+- `src/lib/types.ts` mirrors the backend Pydantic schemas 1:1.
+- `ui/node_modules` and `ui/dist` are gitignored build artifacts.

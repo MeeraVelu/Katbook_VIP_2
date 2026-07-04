@@ -36,3 +36,8 @@ _kaggle_out/
 
 # build artifacts / deliverables
 *.zip
+
+# UI (React/Vite) build artifacts
+ui/node_modules/
+ui/dist/
+*.tsbuildinfo

@@ -5,6 +5,9 @@
 .pytest_cache
 .ruff_cache
 .mypy_cache
+**/node_modules
+ui/dist
+*.tsbuildinfo
 results/
 backups/
 test_data/

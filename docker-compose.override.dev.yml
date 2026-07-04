@@ -8,6 +8,12 @@
 # =============================================================================
 
 services:
+  # Expose Postgres to the laptop for local DB GUIs (Adminer / DBeaver / pgAdmin /
+  # VS Code). Bound to localhost only. NOT in the production compose.
+  postgres:
+    ports:
+      - "127.0.0.1:5432:5432"
+
   # No GPU services in dev.
   vllm:
     profiles: ["disabled"]      # not started in dev

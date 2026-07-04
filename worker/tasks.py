@@ -100,11 +100,27 @@ def _fail_video(video_id: str, message: str) -> None:
         _log.warning("could not mark video failed", extra={"video_id": video_id})
 
 
+def _load_worker_config() -> dict:
+    """Config with the GPU-tier layer applied + the vector(1024) invariant asserted."""
+    cfg = load_config(apply_tier=True)
+    dim = int(cfg.get("EMBED_DIM") or 0)
+    if dim != 1024:
+        raise RuntimeError(
+            f"EMBED_DIM={dim} but the database column is vector(1024). The embedder "
+            f"must be BGE-M3 (1024-d) on every GPU tier — check KVIP_EMBED_MODEL/"
+            f"KVIP_EMBED_DIM. (model={cfg.get('EMBED_MODEL')!r})"
+        )
+    return cfg
+
+
 @shared_task(bind=True, name="worker.tasks.process_video", max_retries=5)
 def process_video(self, job_id: str, video_id: str, source_path: str) -> dict:
     configure_logging()
     bind(job_id=job_id[:8], video_id=video_id[:8])
-    cfg = load_config()
+    from pipeline.gpu_profile import log_startup
+
+    log_startup()
+    cfg = _load_worker_config()
     device = _device()
 
     with session_scope() as s:

@@ -158,7 +158,10 @@ class Settings(BaseSettings):
     profile: str = Field("fast", validation_alias=AliasChoices("KVIP_PROFILE", "profile"))
 
     # --- OCR / routing ------------------------------------------------------- #
-    ocr_langs: str = Field("en", validation_alias=AliasChoices("KVIP_OCR_LANGS", "ocr_langs"))
+    # None = not explicitly set → the tier/profile decides (final fallback "en").
+    ocr_langs: str | None = Field(
+        None, validation_alias=AliasChoices("KVIP_OCR_LANGS", "ocr_langs")
+    )
     silence_db: float = Field(-50.0, validation_alias=AliasChoices("KVIP_SILENCE_DB", "silence_db"))
     min_speech_sec: float = Field(
         3.0, validation_alias=AliasChoices("KVIP_MIN_SPEECH_SEC", "min_speech_sec")
@@ -244,7 +247,6 @@ class Settings(BaseSettings):
         """Flatten into the plain dict the pipeline consumes (BASE keys only;
         ``config.load_config`` merges the PROFILE knobs and scene vocab on top)."""
         exts = [e.strip().lower().lstrip(".") for e in self.video_exts.split(",") if e.strip()]
-        langs = [x.strip() for x in self.ocr_langs.split(",") if x.strip()]
         cfg: dict[str, Any] = {
             "VIDEO_GLOB": self.video_glob,
             "VIDEO_EXTS": exts,
@@ -255,7 +257,6 @@ class Settings(BaseSettings):
             "RESULTS_SUBDIR": "results",
             "CHECKPOINT_SUBDIR": "checkpoints",
             "PROFILE": self.profile,
-            "OCR_LANGS": langs,
             "SILENCE_DB": self.silence_db,
             "MIN_SPEECH_SEC": self.min_speech_sec,
             "RUN_AUDIO_FEATURES": self.run_audio_features,
@@ -274,6 +275,11 @@ class Settings(BaseSettings):
             "HF_TOKEN": self.hf_token,
         }
         # optional explicit overrides (win over the profile in load_config)
+        ocr = (
+            [x.strip() for x in self.ocr_langs.split(",") if x.strip()]
+            if self.ocr_langs is not None
+            else None
+        )
         for key, val in (
             ("EMBED_MODEL", self.embed_model),
             ("EMBED_DIM", self.embed_dim),
@@ -281,6 +287,7 @@ class Settings(BaseSettings):
             ("WHISPER_MODEL", self.whisper_model),
             ("TAGGING_BACKEND", self.tagging_backend),
             ("RESIDENT_VISUAL_STACK", self.resident_visual_stack),
+            ("OCR_LANGS", ocr),
         ):
             if val is not None:
                 cfg[key] = val

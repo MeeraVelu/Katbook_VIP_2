@@ -22,6 +22,7 @@ from api.settings import get_api_settings
 router = APIRouter(tags=["health"])
 
 HEARTBEAT_KEY = "katbook:worker:heartbeat"
+HEARTBEAT_INFO_KEY = "katbook:worker:info"
 HEARTBEAT_MAX_AGE_S = 60
 
 
@@ -56,6 +57,15 @@ def ready(response: Response) -> ReadyResponse:
         r.ping()
         checks["redis"] = True
         hb = r.get(HEARTBEAT_KEY)
+        # surface the worker's GPU tier/device for /system + the GpuTierChip
+        info = r.get(HEARTBEAT_INFO_KEY)
+        if info:
+            try:
+                import json
+
+                details["gpu"] = json.loads(info)
+            except Exception:
+                pass
         if s.require_gpu_heartbeat_for_ready:
             age = (time.time() - float(hb)) if hb else None
             gpu_ok = age is not None and age <= HEARTBEAT_MAX_AGE_S

@@ -180,6 +180,14 @@ def capture_runtime(cfg: dict | None = None) -> dict:
     }
     if cfg:
         rt["profile"] = cfg.get("PROFILE")
+        rt["gpu_tier"] = cfg.get("GPU_TIER")
+    if rt.get("gpu_tier") is None:
+        try:
+            from .gpu_profile import detect_tier
+
+            rt["gpu_tier"] = detect_tier()
+        except Exception:
+            pass
     try:
         from . import __version__ as _v
 

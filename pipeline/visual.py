@@ -168,20 +168,29 @@ def analyze_frames(frames: list[dict], cfg: dict, device: str, *, is_silent: boo
     # whole visual stage instead of load/free/load/free; BLIP-2 (heavier, silent-
     # only) always gets its own context. On a 16 GB T4 (fast profile) each model
     # is still loaded and freed one at a time.
+    # Tier can disable YOLO / BLIP-2 entirely (e.g. CPU tier); default ON preserves
+    # existing behavior when the tier layer isn't applied.
+    yolo_on = cfg.get("YOLO_ENABLED", True)
+    blip_on = cfg.get("BLIP2_ENABLED", True)
     resident = bool(cfg.get("RESIDENT_VISUAL_STACK")) and device == "cuda"
     if resident:
         with managed_model("Visual stack (CLIP+YOLO+OCR resident)") as keep:
             _clip_scenes(frames, cfg, device, keep=keep)
             dist = Counter(f.get("scene") for f in frames)
             log(f"scenes: {dict(dist)}")
-            _yolo_objects(frames, cfg, device, keep=keep)
+            if yolo_on:
+                _yolo_objects(frames, cfg, device, keep=keep)
             _ocr_text(frames, cfg, device, run_all=is_silent, keep=keep)
     else:
         _clip_scenes(frames, cfg, device)
         dist = Counter(f.get("scene") for f in frames)
         log(f"scenes: {dict(dist)}")
-        _yolo_objects(frames, cfg, device)
+        if yolo_on:
+            _yolo_objects(frames, cfg, device)
         _ocr_text(frames, cfg, device, run_all=is_silent)
-    caption_budget = cfg.get("CAPTION_FRAMES", 6) if is_silent else 0
+    if not yolo_on:
+        for f in frames:
+            f.setdefault("objects", [])
+    caption_budget = (cfg.get("CAPTION_FRAMES", 6) if (is_silent and blip_on) else 0)
     _blip_captions(frames, cfg, device, caption_budget)
     return frames

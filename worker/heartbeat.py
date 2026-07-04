@@ -27,20 +27,22 @@ _thread_started = False
 
 
 def _gpu_info() -> dict:
+    """GPU tier + device summary published to Redis for /ready and the console."""
     try:
-        import torch
+        from pipeline.gpu_profile import detect
 
-        if torch.cuda.is_available():
-            cap = torch.cuda.get_device_capability(0)
-            return {
-                "cuda": True,
-                "device": torch.cuda.get_device_name(0),
-                "capability": f"sm_{cap[0]}{cap[1]}",
-                "count": torch.cuda.device_count(),
-            }
-    except Exception as e:  # torch missing / no GPU
-        return {"cuda": False, "error": str(e)[:120]}
-    return {"cuda": False}
+        p = detect()
+        info = p.as_dict()
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                info["count"] = torch.cuda.device_count()
+        except Exception:
+            pass
+        return info
+    except Exception as e:
+        return {"cuda": False, "tier": "cpu", "error": str(e)[:120]}
 
 
 def _redis():

@@ -21,6 +21,19 @@ os.environ.setdefault("EMBEDDINGS_URL", "")  # keyword fallback in search tests
 # fast/smoke profiles' 384-d embedder (the fail-fast validation working). The API
 # ORM gets its vector width from APISettings.embed_dim (default 1024) instead.
 
+# Isolate tests from any local `.env` in the repo root (e.g. a real compose .env
+# used for `docker compose`): its production values would otherwise leak into the
+# profiles under test. pydantic-settings reads model_config["env_file"] at init.
+from pipeline.settings import Settings as _PipelineSettings  # noqa: E402
+
+_PipelineSettings.model_config["env_file"] = None
+try:
+    from api.settings import APISettings as _APISettings  # noqa: E402
+
+    _APISettings.model_config["env_file"] = None
+except Exception:
+    pass
+
 
 @pytest.fixture
 def fake_session() -> MagicMock:

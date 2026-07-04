@@ -21,9 +21,13 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     KVIP_LOG_FORMAT=json
 
-# Non-root runtime user.
+# Non-root runtime user. Pre-create the shared inbox dir owned by that user so the
+# `video-inbox` volume initializes with the right ownership (uid 10001 matches the
+# worker), letting the API write multipart uploads there.
 RUN groupadd --gid 10001 katbook \
-    && useradd --uid 10001 --gid katbook --create-home katbook
+    && useradd --uid 10001 --gid katbook --create-home katbook \
+    && mkdir -p /data/inbox \
+    && chown -R katbook:katbook /data
 
 COPY --from=builder /opt/venv /opt/venv
 

@@ -114,6 +114,10 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+    volumes:
+      # SHARED inbox: the API writes multipart uploads here and the worker reads
+      # them from the SAME volume. Must match the worker's /data/inbox mount.
+      - video-inbox:/data/inbox
     logging: *default-logging
 
   ui:

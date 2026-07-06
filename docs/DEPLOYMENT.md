@@ -57,11 +57,15 @@ external database. **Redis is NOT in the profile — it always runs as a local
 Compose service** (the Celery broker is local, and managed DB providers don't offer
 Redis); point `REDIS_URL` elsewhere only if you run a dedicated Redis.
 
-| Option | Postgres runs… | Start command | `.env` template |
+There is **one** env template — `.env.production.template`. Every option starts the
+same way: `cp .env.production.template .env`, then edit `DATABASE_URL` (and the
+`CHANGE_ME` secrets) to match the option you picked.
+
+| Option | Postgres runs… | Start command | `DATABASE_URL` points at |
 |---|---|---|---|
-| **A — Self-contained** (default) | in Docker (bundled) | `docker compose --profile infra up -d` | `.env.example` |
-| **B — Native Postgres** (recommended prod) | natively on the host | `docker compose up -d` | `.env.production` |
-| **C — Cloud managed** (Supabase/Aiven/Neon) | at a cloud provider | `docker compose up -d` | `.env.production` (cloud URL) |
+| **A — Self-contained** (default) | in Docker (bundled) | `docker compose --profile infra up -d` | the bundled `postgres` service |
+| **B — Native Postgres** (recommended prod) | natively on the host | `docker compose up -d` | the host Postgres |
+| **C — Cloud managed** (Supabase/Aiven/Neon) | at a cloud provider | `docker compose up -d` | the provider URL |
 
 In every option Redis is the bundled Compose service (`redis://redis:6379/0`).
 
@@ -70,9 +74,9 @@ In every option Redis is the bundled Compose service (`redis://redis:6379/0`).
 Simplest: Compose runs Postgres, Redis, migrations, and the app together.
 
 ```bash
-cp .env.example .env
-# edit: POSTGRES_PASSWORD, API_KEY, CORS_ORIGINS; DATABASE_URL points at the
-# bundled `postgres` service by name (postgres:5432) — leave as-is.
+cp .env.production.template .env
+# in .env: uncomment the "SELF-CONTAINED" DATABASE_URL (+ POSTGRES_* block) so it
+# points at the bundled `postgres` service, and set POSTGRES_PASSWORD, API_KEY, CORS.
 docker compose --profile infra up -d     # `migrate` runs Alembic first, then api/worker
 ```
 
@@ -99,7 +103,7 @@ psql -U katbook -d katbook_vip -c "CREATE EXTENSION vector;"
 DATABASE_URL=postgresql://katbook:<pass>@localhost:5432/katbook_vip alembic upgrade head
 
 # 4) point the app at it and start WITHOUT the bundled DB
-cp .env.production .env
+cp .env.production.template .env
 # edit DATABASE_URL (replace CHANGE_ME with the real password), API_KEY, CORS_ORIGINS.
 # NOTE: inside a container "localhost" is the CONTAINER, not the host — to reach a
 # host-native Postgres use the host LAN IP, or host.docker.internal via
@@ -115,10 +119,10 @@ migration (the `migrate` container only runs under `--profile infra`).
 Identical to Option B, but the database lives at a managed provider — no local
 Postgres to install (Redis is still the bundled Compose service). Create the
 instance, enable the `vector` extension (most providers expose `CREATE EXTENSION
-vector;`), then put the provider's connection string in `.env.production`:
+vector;`), then put the provider's connection string in `.env`:
 
 ```bash
-cp .env.production .env
+cp .env.production.template .env
 # DATABASE_URL=postgresql://<user>:<pass>@<host>:5432/<db>?sslmode=require
 alembic upgrade head            # migrate the cloud DB once, from your workstation
 docker compose up -d            # redis runs; postgres + migrate skipped

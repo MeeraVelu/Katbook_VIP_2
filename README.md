@@ -40,7 +40,7 @@ legacy/      retired Kaggle POC (notebook, kaggle_run, sync/search scripts)
 docker-compose.yml  docker-compose.override.dev.yml   # production stack (8 services) + CPU/dev override
 requirements.txt  requirements-worker.txt             # API image deps / worker (GPU) image deps
 pyproject.toml                                         # build + ruff/mypy/pytest config, dev extras ([dev])
-alembic.ini  Makefile  .env.example  .gitignore  .dockerignore  README.md
+alembic.ini  Makefile  .env.production.template  .gitignore  .dockerignore  README.md
 ```
 
 ## Deploy (the short version)
@@ -53,22 +53,23 @@ pip install torch --index-url https://download.pytorch.org/whl/cu128
 python scripts/verify_gpu.py            # expect RESULT: PASS
 ```
 
-Then pick where the **database** runs — the app is identical either way, it just
-reads `DATABASE_URL`. Postgres and `migrate` are bundled behind the **`infra`**
-compose profile, so a plain `up` skips them for an external DB. **Redis always runs
-as a local Compose service** (managed DBs don't provide one).
+Then copy the one env template and pick where the **database** runs — the app is
+identical either way, it just reads `DATABASE_URL`. Postgres and `migrate` are
+bundled behind the **`infra`** compose profile, so a plain `up` skips them for an
+external DB. **Redis always runs as a local Compose service** (managed DBs don't
+provide one).
 
 ```bash
+cp .env.production.template .env          # then edit DATABASE_URL + the CHANGE_ME secrets
+
 # ── Path A · self-contained (bundled Postgres in Docker) — eval/testing ────────
-cp .env.example .env                     # set POSTGRES_PASSWORD, API_KEY, CORS_ORIGINS
-docker compose --profile infra up -d     # migrate runs Alembic before api/worker
+#   in .env: use the SELF-CONTAINED DATABASE_URL (bundled `postgres` service)
+docker compose --profile infra up -d      # migrate runs Alembic before api/worker
 
 # ── Path B · external DB (cloud e.g. Supabase, or native Postgres) — production ─
-#   cloud: enable pgvector + use the connection string (Supabase → SESSION POOLER, :5432)
-#   native: sudo apt install postgresql-16 postgresql-16-pgvector
-#           sudo -u postgres createdb katbook_vip -O katbook  (createuser katbook -P first)
-#   then migrate once:  alembic upgrade head
-cp .env.production .env                   # set the real DATABASE_URL, API_KEY, CORS
+#   in .env: set DATABASE_URL to the external DB (Supabase → SESSION POOLER, :5432)
+#   native install: sudo apt install postgresql-16 postgresql-16-pgvector
+#   migrate the external DB once:  alembic upgrade head
 docker compose up -d                      # postgres + migrate skipped; redis runs
 
 curl -s localhost:8000/ready             # ready:true when DB+Redis+worker GPU are good

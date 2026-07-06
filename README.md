@@ -40,7 +40,7 @@ legacy/      retired Kaggle POC (notebook, kaggle_run, sync/search scripts)
 docker-compose.yml  docker-compose.override.dev.yml   # production stack (8 services) + CPU/dev override
 requirements.txt  requirements-worker.txt             # API image deps / worker (GPU) image deps
 pyproject.toml                                         # build + ruff/mypy/pytest config, dev extras ([dev])
-alembic.ini  Makefile  .env.production.template  .gitignore  .dockerignore  README.md
+alembic.ini  Makefile  .env.example  .gitignore  .dockerignore  README.md
 ```
 
 ## Deploy (the short version)
@@ -60,7 +60,7 @@ external DB. **Redis always runs as a local Compose service** (managed DBs don't
 provide one).
 
 ```bash
-cp .env.production.template .env          # then edit DATABASE_URL + the CHANGE_ME secrets
+cp .env.example .env          # then edit DATABASE_URL + the CHANGE_ME secrets
 
 # ── Path A · self-contained (bundled Postgres in Docker) — eval/testing ────────
 #   in .env: use the SELF-CONTAINED DATABASE_URL (bundled `postgres` service)

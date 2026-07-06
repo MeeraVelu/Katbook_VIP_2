@@ -1,7 +1,7 @@
 # =============================================================================
 # Katbook VIP — production stack (single RTX 5090 host).
 #
-#   cp .env.production.template .env   # fill in secrets
+#   cp .env.example .env   # fill in secrets
 #   docker compose up -d
 #
 # GPU services (worker, vllm) require the NVIDIA Container Toolkit on the host

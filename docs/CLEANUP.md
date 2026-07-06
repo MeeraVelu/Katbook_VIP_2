@@ -43,7 +43,7 @@ Target requirements scheme after consolidation:
 | `Makefile` | ENTRY-POINT | dev/ops targets | keep (update `install-dev`) |
 | `.gitignore` | ENTRY-POINT | git | keep |
 | `.dockerignore` | ENTRY-POINT | docker build | keep |
-| `.env.production.template` | ENTRY-POINT | copy to `.env` (`env_file`), docs | keep |
+| `.env.example` | ENTRY-POINT | copy to `.env` (`env_file`), docs | keep |
 | `README.md` | ENTRY-POINT | root readme | keep (update layout section) |
 
 ### Root — TO CHANGE

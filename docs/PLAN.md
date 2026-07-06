@@ -168,7 +168,7 @@ GPU-specific parts are correct-by-construction and documented.
 - **[new] pinned requirements** — consolidated in the cleanup pass to two root
   files: `requirements.txt` (API image) + `requirements-worker.txt` (worker, cu128);
   dev/test/CLI deps live in `pyproject.toml [project.optional-dependencies].dev`.
-- **[new] `.env.production.template`** — every variable, commented; copy to `.env`.
+- **[new] `.env.example`** — every variable, commented; copy to `.env`.
   Secrets via env only.
 - **[mod] `.gitignore`** — add `.env`, inbox, model-cache, `*.sqlite`.
 
@@ -192,7 +192,7 @@ GPU-specific parts are correct-by-construction and documented.
 1. Core refactor (settings, logging, llm_backend, tagging, storage, ingest, visual, nlp, pipeline).
 2. Alembic schema + models.
 3. Worker (Celery) → API (FastAPI).
-4. Scripts + Docker + requirements + pyproject + Makefile + .env.production.template.
+4. Scripts + Docker + requirements + pyproject + Makefile + .env.example.
 5. Tests.
 6. Docs + legacy move.
 7. `ruff`, `pytest`, `make smoke`, `docker compose config` → final checklist.

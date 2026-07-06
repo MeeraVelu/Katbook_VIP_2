@@ -57,8 +57,8 @@ external database. **Redis is NOT in the profile — it always runs as a local
 Compose service** (the Celery broker is local, and managed DB providers don't offer
 Redis); point `REDIS_URL` elsewhere only if you run a dedicated Redis.
 
-There is **one** env template — `.env.production.template`. Every option starts the
-same way: `cp .env.production.template .env`, then edit `DATABASE_URL` (and the
+There is **one** env template — `.env.example`. Every option starts the
+same way: `cp .env.example .env`, then edit `DATABASE_URL` (and the
 `CHANGE_ME` secrets) to match the option you picked.
 
 | Option | Postgres runs… | Start command | `DATABASE_URL` points at |
@@ -74,7 +74,7 @@ In every option Redis is the bundled Compose service (`redis://redis:6379/0`).
 Simplest: Compose runs Postgres, Redis, migrations, and the app together.
 
 ```bash
-cp .env.production.template .env
+cp .env.example .env
 # in .env: uncomment the "SELF-CONTAINED" DATABASE_URL (+ POSTGRES_* block) so it
 # points at the bundled `postgres` service, and set POSTGRES_PASSWORD, API_KEY, CORS.
 docker compose --profile infra up -d     # `migrate` runs Alembic first, then api/worker
@@ -103,7 +103,7 @@ psql -U katbook -d katbook_vip -c "CREATE EXTENSION vector;"
 DATABASE_URL=postgresql://katbook:<pass>@localhost:5432/katbook_vip alembic upgrade head
 
 # 4) point the app at it and start WITHOUT the bundled DB
-cp .env.production.template .env
+cp .env.example .env
 # edit DATABASE_URL (replace CHANGE_ME with the real password), API_KEY, CORS_ORIGINS.
 # NOTE: inside a container "localhost" is the CONTAINER, not the host — to reach a
 # host-native Postgres use the host LAN IP, or host.docker.internal via
@@ -122,7 +122,7 @@ instance, enable the `vector` extension (most providers expose `CREATE EXTENSION
 vector;`), then put the provider's connection string in `.env`:
 
 ```bash
-cp .env.production.template .env
+cp .env.example .env
 # DATABASE_URL=postgresql://<user>:<pass>@<host>:5432/<db>?sslmode=require
 alembic upgrade head            # migrate the cloud DB once, from your workstation
 docker compose up -d            # redis runs; postgres + migrate skipped

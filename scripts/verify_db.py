@@ -94,7 +94,7 @@ def main() -> int:
     url = os.environ.get("DATABASE_URL")
     if not url:
         print("[FAIL] DATABASE_URL is not set (env) and no .env found next to the repo root.")
-        print("Remediation: cp .env.production.template .env and set DATABASE_URL.")
+        print("Remediation: cp .env.example .env and set DATABASE_URL.")
         return 1
     print(f"DATABASE_URL: {_mask(url)}")
 

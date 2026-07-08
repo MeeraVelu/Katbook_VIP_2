@@ -52,37 +52,39 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-ink/70 px-4 pt-[12vh] backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/30 px-4 pt-[12vh] backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl overflow-hidden rounded-2xl border border-line bg-panel shadow-glow"
+        className="w-full max-w-2xl overflow-hidden rounded-2xl border border-line bg-white shadow-glow"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={onKey}
       >
-        <div className="flex items-center gap-3 border-b border-line px-4 py-3">
-          <SearchIcon size={18} className="text-cyan" />
-          {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
-          <input
-            autoFocus
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search segments by meaning or keyword…"
-            className="flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-faint"
-          />
-          <div className="flex gap-1 rounded-lg border border-line p-0.5">
-            {MODES.map((m) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={cx(
-                  "rounded-md px-2 py-1 text-[11px] capitalize transition-colors",
-                  mode === m ? "bg-cyan/20 text-cyan" : "text-muted hover:text-fg",
-                )}
-              >
-                {m}
-              </button>
-            ))}
+        <div className="p-3">
+          <div className="flex items-center gap-3 rounded-full border border-line bg-slate-50 px-4 py-2.5 transition-colors focus-within:border-accent/50 focus-within:shadow-[0_0_0_3px_rgba(14,165,233,0.15)]">
+            <SearchIcon size={18} className="shrink-0 text-cyan" />
+            {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
+            <input
+              autoFocus
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search segments by meaning or keyword…"
+              className="flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-faint"
+            />
+            <div className="flex gap-1 rounded-full border border-line bg-white p-0.5">
+              {MODES.map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setMode(m)}
+                  className={cx(
+                    "rounded-full px-2.5 py-1 text-[11px] capitalize transition-all",
+                    mode === m ? "bg-sky-100 text-sky-700 font-medium shadow-sm" : "text-muted hover:text-fg",
+                  )}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -109,7 +111,8 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
           )}
         </div>
 
-        <div className="flex items-center justify-between border-t border-line px-4 py-2 text-[11px] text-faint">
+        <div className="divider-fade" />
+        <div className="flex items-center justify-between px-4 py-2.5 text-[11px] text-faint">
           <span className="flex items-center gap-1">
             <CornerDownLeft size={12} /> open · ↑↓ navigate · esc close
           </span>

@@ -14,7 +14,7 @@
 
 @layer base {
   :root {
-    color-scheme: dark;
+    color-scheme: light;
   }
   html,
   body,
@@ -22,47 +22,58 @@
     height: 100%;
   }
   body {
-    @apply bg-ink text-fg font-sans antialiased;
+    @apply text-fg font-sans antialiased;
+    /* white -> very light sky-blue-gray, fixed so it reads as a calm wash, not a scroll artifact */
+    background: linear-gradient(180deg, #ffffff 0%, #f5faff 100%);
+    background-attachment: fixed;
     font-feature-settings: "cv11", "ss01";
   }
-  /* numbers, ids, hashes, timings render in tabular mono */
+  /* numbers, ids, hashes, timings render in tabular mono — the ONE place monospace is used */
   .num {
     @apply font-mono tabular-nums;
   }
+  h1,
+  h2,
+  h3 {
+    @apply font-semibold text-fg;
+  }
   ::selection {
-    background: rgba(245, 158, 11, 0.28);
+    background: rgba(14, 165, 233, 0.18);
   }
   /* accent focus ring for keyboard users */
   :focus-visible {
-    @apply outline-none ring-2 ring-accent/70 ring-offset-2 ring-offset-ink;
+    @apply outline-none ring-2 ring-accent/60 ring-offset-2 ring-offset-white;
   }
-  /* thin dark scrollbars */
+  /* thin light scrollbars */
   * {
     scrollbar-width: thin;
-    scrollbar-color: #232c3b transparent;
+    scrollbar-color: #cbd5e1 transparent;
   }
   *::-webkit-scrollbar {
     height: 8px;
     width: 8px;
   }
   *::-webkit-scrollbar-thumb {
-    background: #232c3b;
+    background: #cbd5e1;
     border-radius: 8px;
   }
 }
 
 @layer components {
-  /* subtle dot-grid texture for the app shell */
+  /* subtle dot-grid texture — faint dark dots on the light gradient base */
   .dot-grid {
-    background-image: radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-image: radial-gradient(rgba(15, 23, 42, 0.045) 1px, transparent 1px);
     background-size: 22px 22px;
     background-position: -1px -1px;
   }
+
+  /* the card formula: solid white, light hairline, soft (not colored) shadow,
+     12px radius. No blur / no glass — flat and clean per the light-SaaS brief. */
   .panel {
-    @apply rounded-2xl border border-line bg-panel shadow-panel;
+    @apply relative overflow-hidden rounded-xl border border-line bg-panel shadow-panel;
   }
   .panel-hover {
-    @apply transition-shadow duration-200 hover:shadow-glow;
+    @apply transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-accent/30 hover:shadow-glow;
   }
   .hairline {
     @apply border-line;
@@ -74,14 +85,24 @@
   .shimmer::after {
     content: "";
     @apply absolute inset-0 -translate-x-full animate-shimmer;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+    background: linear-gradient(90deg, transparent, rgba(15, 23, 42, 0.06), transparent);
+  }
+  /* gradient headline word — used sparingly, one per page hero */
+  .text-gradient {
+    @apply bg-gradient-to-r from-accent to-cyan bg-clip-text text-transparent;
+  }
+  /* 1px gradient-fade divider — replaces flat gray section rules */
+  .divider-fade {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(15, 23, 42, 0.1), transparent);
   }
 }
 
 /* honor reduced-motion: kill the pulse + shimmer */
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse-accent,
-  .animate-shimmer {
+  .animate-shimmer,
+  .animate-ping {
     animation: none !important;
   }
 }

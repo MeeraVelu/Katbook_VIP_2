@@ -113,6 +113,12 @@ export interface SoftDeleteResponse {
   message: string;
 }
 
+export interface FacetsResponse {
+  subjects: string[];
+  grades: string[];
+  languages: string[];
+}
+
 export interface JobStatus {
   job_id: string;
   video_id: string | null;

@@ -4,6 +4,7 @@
 import type {
   BatchRequest,
   BatchResponse,
+  FacetsResponse,
   HealthResponse,
   JobStatus,
   Page,
@@ -27,6 +28,14 @@ export function getApiKey(): string {
 export function setApiKey(key: string): void {
   if (key) localStorage.setItem(KEY_STORAGE, key);
   else localStorage.removeItem(KEY_STORAGE);
+}
+
+// Source-video URL for an HTML5 <video> element. A media element can't send the
+// X-API-Key header, so the key rides as a query param (the /stream endpoint
+// accepts either). Same-origin relative path -> nginx/vite proxy it to the API.
+export function streamUrl(videoId: string): string {
+  const key = getApiKey();
+  return `/api/v1/videos/${videoId}/stream${key ? `?key=${encodeURIComponent(key)}` : ""}`;
 }
 
 export class ApiError extends Error {
@@ -98,6 +107,7 @@ export const api = {
       `/api/v1/videos${qs({ page, page_size: pageSize, ...filters })}`,
     ),
   getVideo: (id: string) => request<VideoDetail>(`/api/v1/videos/${id}`),
+  facets: () => request<FacetsResponse>("/api/v1/videos/facets"),
   registerVideo: (body: RegisterVideoRequest) =>
     request<RegisterVideoResponse>("/api/v1/videos", { method: "POST", body }),
   uploadVideo: (file: File, force = false) => {

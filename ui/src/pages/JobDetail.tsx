@@ -1,11 +1,11 @@
 import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, FileVideo } from "lucide-react";
+import { ArrowLeft, CalendarClock, FileVideo, Flag, Hourglass, PlayCircle, Repeat } from "lucide-react";
 import { useJob } from "@/hooks/queries";
 import { rememberJob } from "@/lib/recents";
 import { fmtDate, shortId } from "@/lib/format";
 import { PipelineStepper } from "@/components/PipelineStepper";
-import { Badge, Button, ErrorState, Panel, Skeleton, cx } from "@/components/primitives";
+import { Badge, Button, ErrorState, IconBadge, Panel, Skeleton, StatTile } from "@/components/primitives";
 
 export function JobDetail() {
   const { id } = useParams();
@@ -28,15 +28,22 @@ export function JobDetail() {
         <ArrowLeft size={15} /> Jobs
       </button>
 
-      <Panel className="space-y-5">
+      <Panel glow="accent" className="space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="font-display text-xl font-bold">Job</h1>
-              <Badge status={job.state} />
-              {live && <span className="num text-xs text-accent">● live</span>}
+          <div className="flex items-center gap-3">
+            <IconBadge icon={Flag} tone={job.state === "failed" ? "bad" : job.state === "done" ? "ok" : "accent"} size={40} />
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="font-display text-xl font-bold">Job</h1>
+                <Badge status={job.state} />
+                {live && (
+                  <span className="num flex items-center gap-1 text-xs text-accent">
+                    <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse-accent" /> live
+                  </span>
+                )}
+              </div>
+              <div className="num mt-1 text-xs text-faint">{job.job_id}</div>
             </div>
-            <div className="num mt-1 text-xs text-faint">{job.job_id}</div>
           </div>
           {job.video_id && (
             <Button variant="ghost" onClick={() => nav(`/videos/${job.video_id}`)}>
@@ -53,27 +60,18 @@ export function JobDetail() {
           stageTimings={job.stage_timings}
         />
 
-        <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-4">
-          <Meta k="Current stage" val={job.current_stage ?? "—"} />
-          <Meta k="Attempts" val={String(job.attempts)} mono />
-          <Meta k="Elapsed" val={job.elapsed_sec != null ? `${job.elapsed_sec}s` : "—"} mono />
-          <Meta k="Video" val={shortId(job.video_id)} mono />
-          <Meta k="Enqueued" val={fmtDate(job.enqueued_at)} mono />
-          <Meta k="Started" val={fmtDate(job.started_at)} mono />
-          <Meta k="Finished" val={fmtDate(job.finished_at)} mono />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StatTile icon={PlayCircle} label="Current stage" value={job.current_stage ?? "—"} tone="accent" />
+          <StatTile icon={Repeat} label="Attempts" value={job.attempts} tone="muted" mono />
+          <StatTile icon={Hourglass} label="Elapsed" value={job.elapsed_sec != null ? `${job.elapsed_sec}s` : "—"} tone="cyan" mono />
+          <StatTile icon={FileVideo} label="Video" value={shortId(job.video_id)} tone="muted" mono />
+          <StatTile icon={CalendarClock} label="Enqueued" value={fmtDate(job.enqueued_at)} tone="muted" mono />
+          <StatTile icon={CalendarClock} label="Started" value={fmtDate(job.started_at)} tone="muted" mono />
+          <StatTile icon={CalendarClock} label="Finished" value={fmtDate(job.finished_at)} tone="muted" mono />
         </div>
 
-        {job.error && <div className="rounded-xl border border-bad/30 bg-bad/5 px-3 py-2 text-sm text-bad">{job.error}</div>}
+        {job.error && <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{job.error}</div>}
       </Panel>
-    </div>
-  );
-}
-
-function Meta({ k, val, mono }: { k: string; val: string; mono?: boolean }) {
-  return (
-    <div>
-      <div className="text-xs text-faint">{k}</div>
-      <div className={cx("truncate", mono && "num")}>{val}</div>
     </div>
   );
 }

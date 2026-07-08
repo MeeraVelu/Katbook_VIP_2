@@ -1,21 +1,21 @@
 // Shared visualization constants: subject color scale + the pipeline stage order
 // used by SegmentTimeline and PipelineStepper.
 
-// Categorical, dark-friendly palette for subject blocks (distinct from the amber
-// accent / green-ok / red-bad / cyan-search reserved meanings).
+// Categorical palette for subject blocks, tuned for legibility on WHITE (600-ish
+// shades read as text; distinct from the sky-blue accent / green-ok / red-bad).
 const SUBJECT_PALETTE = [
-  "#6EA8FE", // blue
-  "#A78BFA", // violet
-  "#F0A5C0", // pink
-  "#7DD3A8", // sage
-  "#E6B450", // gold
-  "#5EC8C8", // teal
-  "#C4A484", // tan
-  "#9AA7FF", // periwinkle
+  "#7C3AED", // violet
+  "#DB2777", // pink
+  "#D97706", // amber
+  "#EA580C", // orange
+  "#0D9488", // teal
+  "#4F46E5", // indigo
+  "#92400E", // brown/tan
+  "#475569", // slate
 ];
 
 export function subjectColor(subject: string | null | undefined): string {
-  if (!subject) return "#3A4453"; // muted slab for untagged
+  if (!subject) return "#94A3B8"; // muted slab for untagged
   let h = 0;
   for (let i = 0; i < subject.length; i++) h = (h * 31 + subject.charCodeAt(i)) >>> 0;
   return SUBJECT_PALETTE[h % SUBJECT_PALETTE.length];

@@ -1,13 +1,23 @@
 import { useEffect } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  BarChart3,
+  Clock,
+  Fingerprint,
+  GraduationCap,
+  Languages,
+  Layers,
+  Trash2,
+} from "lucide-react";
 import { useSoftDelete, useVideo } from "@/hooks/queries";
 import type { SegmentOut } from "@/lib/types";
 import { fileName, fmtClock, shortId } from "@/lib/format";
 import { subjectColor } from "@/lib/viz";
 import { SegmentTimeline } from "@/components/SegmentTimeline";
+import { VideoWatch } from "@/components/VideoWatch";
 import { ConfidenceRing } from "@/components/ConfidenceRing";
-import { Badge, Button, ErrorState, Panel, Skeleton, cx } from "@/components/primitives";
+import { Badge, Button, ErrorState, IconBadge, Panel, Skeleton, StatTile } from "@/components/primitives";
 
 export function VideoDetail() {
   const { id } = useParams();
@@ -51,14 +61,17 @@ export function VideoDetail() {
       </button>
 
       {/* header */}
-      <Panel className="space-y-4">
+      <Panel glow="accent" className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="truncate font-display text-2xl font-bold">{fileName(v.source_path)}</h1>
-              <Badge status={v.status} />
+          <div className="flex min-w-0 items-center gap-3">
+            <IconBadge icon={Layers} tone="accent" size={44} />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="truncate font-display text-2xl font-bold">{fileName(v.source_path)}</h1>
+                <Badge status={v.status} />
+              </div>
+              <div className="num mt-1 text-xs text-faint">{v.video_id}</div>
             </div>
-            <div className="num mt-1 text-xs text-faint">{v.video_id}</div>
           </div>
           <Button
             variant="danger"
@@ -73,15 +86,20 @@ export function VideoDetail() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-4">
-          <Meta k="Path" val={v.tagging_path ?? "—"} />
-          <Meta k="Language" val={v.language ?? "—"} />
-          <Meta k="Duration" val={fmtClock(v.duration_sec)} mono />
-          <Meta k="Segments" val={String(v.segment_count)} mono />
-          <Meta k="Subject" val={v.rollup.subject ?? "—"} />
-          <Meta k="Grade" val={v.rollup.grade ?? "—"} />
-          <Meta k="Difficulty" val={v.rollup.difficulty ?? "—"} />
-          <Meta k="Hash" val={shortId(v.content_hash, 12)} mono />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StatTile icon={Clock} label="Duration" value={fmtClock(v.duration_sec)} tone="cyan" mono />
+          <StatTile icon={BarChart3} label="Segments" value={v.segment_count} tone="accent" mono />
+          <StatTile icon={Languages} label="Language" value={v.language ?? "—"} tone="muted" />
+          <StatTile icon={GraduationCap} label="Grade" value={v.rollup.grade ?? "—"} tone="muted" />
+          <StatTile icon={Layers} label="Path" value={v.tagging_path ?? "—"} tone="muted" />
+          <StatTile
+            icon={BarChart3}
+            label="Subject"
+            value={<span style={{ color: subjectColor(v.rollup.subject) }}>{v.rollup.subject ?? "—"}</span>}
+            tone="muted"
+          />
+          <StatTile icon={GraduationCap} label="Difficulty" value={v.rollup.difficulty ?? "—"} tone="muted" />
+          <StatTile icon={Fingerprint} label="Hash" value={shortId(v.content_hash, 12)} tone="muted" mono />
         </div>
 
         {v.rollup.primary_topic && (
@@ -92,7 +110,7 @@ export function VideoDetail() {
         )}
 
         {v.error_message && (
-          <div className="rounded-xl border border-bad/30 bg-bad/5 px-3 py-2 text-sm text-bad">{v.error_message}</div>
+          <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{v.error_message}</div>
         )}
 
         {v.segments.length > 0 && (
@@ -102,6 +120,9 @@ export function VideoDetail() {
           </div>
         )}
       </Panel>
+
+      {/* video player + click-to-seek segment list */}
+      {v.segments.length > 0 && <VideoWatch videoId={v.video_id} segments={v.segments} />}
 
       {/* segment cards */}
       <div className="space-y-3">
@@ -113,30 +134,23 @@ export function VideoDetail() {
   );
 }
 
-function Meta({ k, val, mono }: { k: string; val: string; mono?: boolean }) {
-  return (
-    <div>
-      <div className="text-xs text-faint">{k}</div>
-      <div className={cx("truncate", mono && "num")}>{val}</div>
-    </div>
-  );
-}
-
 function SegmentCard({ s }: { s: SegmentOut }) {
   const silentEvidence = s.scenes.length || s.objects.length || s.captions.length;
+  const color = subjectColor(s.subject);
   return (
-    <Panel id={`seg-${s.seg_index}`} hover className="scroll-mt-24 transition-shadow">
-      <div className="flex items-start gap-4">
-        <div className="flex flex-col items-center gap-1">
+    <Panel id={`seg-${s.seg_index}`} hover className="scroll-mt-24">
+      <div aria-hidden className="absolute inset-y-0 left-0 w-1" style={{ background: color }} />
+      <div className="flex items-start gap-4 pl-1.5">
+        <div className="flex flex-col items-center gap-1.5">
           <ConfidenceRing value={s.confidence} />
-          <span className="num text-[10px] text-faint">#{s.seg_index + 1}</span>
+          <span className="num rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-faint">#{s.seg_index + 1}</span>
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="font-display text-lg" style={{ color: subjectColor(s.subject) }}>
+            <h3 className="font-display text-lg font-semibold" style={{ color }}>
               {s.topic ?? "untitled segment"}
             </h3>
-            <span className="num text-xs text-muted">
+            <span className="num rounded-full bg-slate-100 px-2 py-0.5 text-xs text-muted">
               {fmtClock(s.start_sec)}–{fmtClock(s.end_sec)}
             </span>
           </div>
@@ -147,7 +161,10 @@ function SegmentCard({ s }: { s: SegmentOut }) {
           {s.tags.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {s.tags.map((t) => (
-                <span key={t} className="rounded-full border border-line bg-panel2 px-2 py-0.5 text-[11px] text-muted">
+                <span
+                  key={t}
+                  className="rounded-full border border-line bg-slate-50 px-2.5 py-0.5 text-[11px] text-muted transition-colors hover:border-accent/30 hover:bg-sky-50 hover:text-fg"
+                >
                   {t}
                 </span>
               ))}

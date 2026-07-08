@@ -22,8 +22,8 @@ export function HitRow({
       type="button"
       onClick={onClick}
       className={cx(
-        "group flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
-        selected ? "border-accent/50 bg-accent/5" : "border-transparent hover:bg-panel2",
+        "group flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-all duration-200",
+        selected ? "border-accent/30 bg-sky-50" : "border-transparent hover:border-line hover:bg-sky-50/60",
       )}
     >
       <div className="min-w-0 flex-1">
@@ -35,12 +35,12 @@ export function HitRow({
         {hit.summary && <div className="mt-0.5 truncate text-[11px] text-faint">{hit.summary}</div>}
       </div>
       <div className="flex w-28 flex-col items-end gap-1">
-        <span className="num text-xs text-cyan">{fmtScore(hit.score, mode)}</span>
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-panel2">
-          <div className="h-full rounded-full bg-cyan" style={{ width: `${pct}%` }} />
+        <span className="num text-xs text-cyan-600">{fmtScore(hit.score, mode)}</span>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+          <div className="h-full rounded-full bg-gradient-to-r from-accent to-cyan" style={{ width: `${pct}%` }} />
         </div>
       </div>
-      <ArrowRight size={15} className="text-faint transition-colors group-hover:text-accent" />
+      <ArrowRight size={15} className="text-faint transition-all group-hover:translate-x-0.5 group-hover:text-accent" />
     </button>
   );
 }

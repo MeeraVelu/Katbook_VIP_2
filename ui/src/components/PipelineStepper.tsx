@@ -26,19 +26,33 @@ export function PipelineStepper({ state, currentStage, elapsedSec, stageTimings 
         return (
           <div key={stage.key} className="flex min-w-[84px] flex-1 flex-col items-center">
             <div className="flex w-full items-center">
-              <span className={cx("h-px flex-1", i === 0 ? "opacity-0" : isDone || isCurrent ? "bg-accent/60" : "bg-line")} />
               <span
                 className={cx(
-                  "flex h-8 w-8 items-center justify-center rounded-full border text-xs",
-                  isDone && "border-accent bg-accent text-ink",
+                  "h-px flex-1",
+                  i === 0 ? "opacity-0" : isDone || isCurrent ? "bg-gradient-to-r from-accent to-cyan" : "bg-line",
+                )}
+              />
+              <span
+                className={cx(
+                  "flex h-8 w-8 items-center justify-center rounded-full border text-xs transition-all duration-300",
+                  isDone && "border-transparent bg-gradient-to-br from-accent to-cyan text-white shadow-panel",
                   isCurrent && "border-accent text-accent animate-pulse-accent",
-                  isFailed && "border-bad bg-bad/15 text-bad",
-                  !isDone && !isCurrent && !isFailed && "border-line text-faint",
+                  isFailed && "border-bad bg-bad/10 text-bad",
+                  !isDone && !isCurrent && !isFailed && "border-line bg-slate-50 text-faint",
                 )}
               >
                 {isDone ? <Check size={15} /> : isFailed ? <X size={15} /> : <span className="num">{i + 1}</span>}
               </span>
-              <span className={cx("h-px flex-1", i === PIPELINE_STAGES.length - 1 ? "opacity-0" : i < activeIdx ? "bg-accent/60" : "bg-line")} />
+              <span
+                className={cx(
+                  "h-px flex-1",
+                  i === PIPELINE_STAGES.length - 1
+                    ? "opacity-0"
+                    : i < activeIdx
+                      ? "bg-gradient-to-r from-accent to-cyan"
+                      : "bg-line",
+                )}
+              />
             </div>
             <div className={cx("mt-2 text-xs", isCurrent ? "font-semibold text-accent" : isDone ? "text-fg" : "text-faint")}>
               {stage.label}

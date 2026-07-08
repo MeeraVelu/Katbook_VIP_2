@@ -13,12 +13,12 @@ export function ConfidenceRing({
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const dash = c * v;
-  // low confidence leans muted-cyan, high leans warm accent
-  const color = value == null ? "#3A4453" : v >= 0.7 ? "#F59E0B" : v >= 0.45 ? "#4CC9D6" : "#8B94A7";
+  // low confidence leans slate, mid leans cyan, high leans sky-blue accent
+  const color = value == null ? "#CBD5E1" : v >= 0.7 ? "#0369A1" : v >= 0.45 ? "#06B6D4" : "#94A3B8";
   return (
     <div className="relative inline-flex" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#232C3B" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#E2E8F0" strokeWidth={stroke} />
         <circle
           cx={size / 2}
           cy={size / 2}

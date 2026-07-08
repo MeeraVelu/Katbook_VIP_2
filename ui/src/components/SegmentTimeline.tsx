@@ -19,7 +19,7 @@ export function SegmentTimeline({ segments, duration, onSelect, mini }: Props) {
 
   return (
     <div className="relative w-full" style={{ height: trackH }}>
-      <div className="absolute inset-0 rounded-lg border border-line bg-panel2/60" />
+      <div className="absolute inset-0 rounded-lg border border-line bg-slate-50" />
       {segments.map((s) => {
         const left = (s.start_sec / total) * 100;
         const width = Math.max(((s.end_sec - s.start_sec) / total) * 100, mini ? 0.8 : 1.2);
@@ -55,7 +55,7 @@ export function SegmentTimeline({ segments, duration, onSelect, mini }: Props) {
         const left = (s.start_sec / total) * 100;
         return (
           <div
-            className="pointer-events-none absolute -top-1 z-10 -translate-y-full whitespace-nowrap rounded-lg border border-line bg-panel px-2.5 py-1.5 text-xs shadow-glow"
+            className="pointer-events-none absolute -top-1 z-10 -translate-y-full whitespace-nowrap rounded-lg border border-line bg-white px-2.5 py-1.5 text-xs shadow-glow"
             style={{ left: `${Math.min(left, 82)}%` }}
           >
             <div className="font-medium text-fg">{s.topic ?? "untitled"}</div>

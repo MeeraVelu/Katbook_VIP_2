@@ -4,11 +4,11 @@ import { readTier, tierLabel, tierMeta } from "@/lib/tiers";
 import { cx } from "./primitives";
 
 const TONE: Record<string, string> = {
-  cpu: "text-faint border-line",
-  mid: "text-cyan border-cyan/30",
-  high: "text-accent-soft border-accent/30",
-  flagship: "text-accent border-accent/50 shadow-glow",
-  dc: "text-cyan border-cyan/40",
+  cpu: "text-faint border-line bg-slate-50",
+  mid: "text-cyan-700 border-cyan-200 bg-cyan-50",
+  high: "text-sky-700 border-sky-200 bg-sky-50",
+  flagship: "text-sky-700 bg-sky-100 border-sky-300 shadow-panel font-semibold",
+  dc: "text-cyan-700 border-cyan-200 bg-cyan-50",
 };
 
 export function GpuTierChip() {
@@ -21,7 +21,7 @@ export function GpuTierChip() {
     <div
       title={title}
       className={cx(
-        "inline-flex items-center gap-1.5 rounded-lg border bg-panel px-2.5 py-1",
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 transition-colors",
         TONE[meta.tone] ?? TONE.cpu,
       )}
     >

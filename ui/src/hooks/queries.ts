@@ -39,6 +39,16 @@ export function useVideos(page: number, pageSize: number, filters: VideoFilters)
   });
 }
 
+// Distinct subject/grade/language values for the Library filter autocomplete.
+// Rarely changes, so a longer staleTime avoids refetching on every filter keystroke.
+export function useFacets() {
+  return useQuery({
+    queryKey: ["facets"],
+    queryFn: api.facets,
+    staleTime: 60_000,
+  });
+}
+
 export function useVideo(id: string | undefined) {
   return useQuery({
     queryKey: ["video", id],

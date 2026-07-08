@@ -272,6 +272,44 @@ def get_video(session: Session, video_id: uuid.UUID) -> Video | None:
     return session.get(Video, video_id)
 
 
+def list_facets(session: Session) -> dict:
+    """Distinct subject/grade/language values already present in the (non-deleted)
+    library — powers the Library page's filter autocomplete."""
+    subjects = (
+        session.execute(
+            select(Segment.subject)
+            .distinct()
+            .join(Video, Video.video_id == Segment.video_id)
+            .where(Segment.subject.isnot(None), Video.status != "soft_deleted")
+            .order_by(Segment.subject)
+        )
+        .scalars()
+        .all()
+    )
+    grades = (
+        session.execute(
+            select(Segment.grade_level)
+            .distinct()
+            .join(Video, Video.video_id == Segment.video_id)
+            .where(Segment.grade_level.isnot(None), Video.status != "soft_deleted")
+            .order_by(Segment.grade_level)
+        )
+        .scalars()
+        .all()
+    )
+    languages = (
+        session.execute(
+            select(Video.language)
+            .distinct()
+            .where(Video.language.isnot(None), Video.status != "soft_deleted")
+            .order_by(Video.language)
+        )
+        .scalars()
+        .all()
+    )
+    return {"subjects": list(subjects), "grades": list(grades), "languages": list(languages)}
+
+
 def soft_delete(session: Session, video_id: uuid.UUID) -> Video | None:
     """Soft-delete ONLY (status flag). Never removes rows or segments — honours
     the safety rule that only exact byte-duplicates are ever deduplicated and no

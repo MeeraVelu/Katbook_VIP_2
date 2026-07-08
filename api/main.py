@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api import __version__
 from api.errors import register_exception_handlers
 from api.middleware import RequestContextMiddleware
-from api.routers import health, jobs, search, videos
+from api.routers import health, jobs, search, stream, videos
 from api.settings import get_api_settings
 from pipeline.logging_config import configure_logging
 
@@ -51,6 +51,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(videos.router)
+    app.include_router(stream.router)
     app.include_router(jobs.router)
     app.include_router(search.router)
     return app

@@ -21,6 +21,7 @@ from api.schemas.common import Page
 from api.schemas.videos import (
     BatchRequest,
     BatchResponse,
+    FacetsResponse,
     RegisterVideoRequest,
     RegisterVideoResponse,
     SegmentOut,
@@ -165,6 +166,14 @@ def list_videos(
     )
     items = [_summary(v, svc.segment_count(db, v.video_id)) for v in rows]
     return Page[VideoSummary](items=items, page=page, page_size=size, total=total)
+
+
+@router.get("/facets", response_model=FacetsResponse)
+def get_facets(db: Session = Depends(db_session)) -> FacetsResponse:
+    """Distinct subject/grade/language values already in the library, for the
+    Library page's filter autocomplete. Registered BEFORE /{video_id} — without
+    that ordering FastAPI would try (and fail) to parse "facets" as a UUID."""
+    return FacetsResponse(**svc.list_facets(db))
 
 
 @router.get("/{video_id}", response_model=VideoDetail)

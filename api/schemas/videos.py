@@ -118,3 +118,12 @@ class SoftDeleteResponse(BaseModel):
     video_id: uuid.UUID
     status: str
     message: str
+
+
+class FacetsResponse(BaseModel):
+    """Distinct filter values already present in the library — powers the
+    Library page's subject/grade/language autocomplete."""
+
+    subjects: list[str] = []
+    grades: list[str] = []
+    languages: list[str] = []

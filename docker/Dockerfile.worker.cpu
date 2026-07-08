@@ -1,0 +1,72 @@
+# syntax=docker/dockerfile:1
+# ---------------------------------------------------------------------------
+# CPU-ONLY worker image — for GPU-less verification (a laptop, or CI).
+#
+# Runs the EXACT same pipeline as docker/Dockerfile.worker, but installs the CPU
+# PyTorch wheels (no CUDA) so `smoke`-profile processing works without an NVIDIA
+# GPU. The pipeline already loads each heavy model, uses it, and frees it before
+# the next (RESIDENT_VISUAL_STACK=False in the smoke profile), so it fits in CPU
+# RAM one model at a time.
+#
+# NOT for production — there is no CUDA here. Use docker/Dockerfile.worker on the
+# RTX 5090. Wire this in via docker-compose.cpu.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.override.dev.yml \
+#       -f docker-compose.cpu.yml up -d --build worker
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=120 \
+    HF_HOME=/models \
+    KVIP_LOG_FORMAT=json
+
+# System deps: bash (entrypoint), ffmpeg (audio/frames), and the shared libs
+# OpenCV / EasyOCR / Ultralytics need at runtime.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        bash ffmpeg libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --upgrade pip
+
+# 1) CPU torch/torchvision FIRST (small wheels, NO CUDA). Unpinned = latest
+#    compatible; --retries/--timeout survive a flaky connection (the cu128 build
+#    failed on a mid-download IncompleteRead).
+RUN pip install --retries 5 --timeout 120 \
+        --index-url https://download.pytorch.org/whl/cpu \
+        torch torchvision
+
+# 2) the rest of the pipeline stack (torch already satisfied).
+COPY requirements-worker.txt .
+RUN pip install --retries 5 --timeout 120 -r requirements-worker.txt
+
+# 3) spaCy English model (used by the NLP stage) baked into the image.
+RUN python -m spacy download en_core_web_sm
+
+# Non-root user; model cache + data dirs owned by it.
+RUN groupadd --gid 10001 katbook \
+    && useradd --uid 10001 --gid katbook --create-home katbook \
+    && mkdir -p /models /data/work /data/inbox /data/results \
+    && chown -R katbook:katbook /models /data
+
+WORKDIR /app
+COPY pipeline/ pipeline/
+COPY api/ api/
+COPY worker/ worker/
+COPY scripts/ scripts/
+COPY docker/ docker/
+COPY pyproject.toml README.md ./
+RUN chown -R katbook:katbook /app
+
+USER katbook
+
+# Liveness: the worker refreshes a Redis heartbeat every HEARTBEAT_INTERVAL s.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
+    CMD python docker/healthcheck.py || exit 1
+
+ENTRYPOINT ["bash", "docker/entrypoint-worker.sh"]

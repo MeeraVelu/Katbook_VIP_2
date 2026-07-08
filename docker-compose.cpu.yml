@@ -1,0 +1,41 @@
+# =============================================================================
+# CPU worker overlay — build the worker from docker/Dockerfile.worker.cpu so the
+# pipeline runs WITHOUT a GPU (laptop / CI verification).
+#
+# Layer it ON TOP of the dev override (which already drops the GPU reservation and
+# selects the smoke profile + stub tagger + CPU ffmpeg):
+#
+#   docker compose -f docker-compose.yml \
+#       -f docker-compose.override.dev.yml \
+#       -f docker-compose.cpu.yml up -d --build worker
+#
+# The worker still writes results to the (external Supabase) DB, so processed
+# videos show up in the API and the UI. Production is unchanged — it uses the
+# default docker/Dockerfile.worker (CUDA) and never loads this file.
+# =============================================================================
+
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker.cpu
+    # Drop the base image's GPU reservation entirely. Neither `deploy: {}` nor an
+    # empty devices list removes it (compose MERGES maps and CONCATENATES lists),
+    # so on a GPU-less host `up` would fail with "could not select device driver
+    # nvidia". The `!reset` tag (Compose >= 2.24) nulls the merged value -> the
+    # worker schedules on pure CPU.
+    deploy: !reset null
+    # Start Celery DIRECTLY instead of via docker/entrypoint-worker.sh. On a
+    # Windows checkout that script has CRLF line endings, so bash reads
+    # `set -euo pipefail\r` and dies with "pipefail: invalid option name". Calling
+    # celery here sidesteps the shell script entirely (same command it would exec).
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        exec celery -A worker.celery_app worker
+        --queues gpu
+        --concurrency ${WORKER_CONCURRENCY:-1}
+        --pool solo
+        --loglevel ${CELERY_LOGLEVEL:-INFO}
+        --without-gossip --without-mingle

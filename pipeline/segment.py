@@ -15,6 +15,8 @@ Both honour MIN_SEGMENT_SEC and MAX_SEGMENTS.
 
 from __future__ import annotations
 
+from collections import Counter
+
 import numpy as np
 
 
@@ -173,4 +175,6 @@ def attach_signals(segs: list[dict], transcript: list[dict], frames: list[dict])
         s["objects"] = sorted({o for f in sf for o in f.get("objects", [])})
         s["ocr"] = " ".join(f.get("ocr", "") for f in sf if f.get("ocr"))[:600]
         s["captions"] = [f["caption"] for f in sf if f.get("caption")][:4]
+        scene_counts = Counter(f["scene"] for f in sf if f.get("scene"))
+        s["dominant_scene"] = scene_counts.most_common(1)[0][0] if scene_counts else None
     return segs

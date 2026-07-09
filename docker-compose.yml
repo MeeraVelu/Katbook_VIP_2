@@ -67,7 +67,8 @@ services:
     command: ["alembic", "upgrade", "head"]
     # OPTIONAL — only runs with `--profile infra` (migrates the BUNDLED postgres).
     # With an EXTERNAL database you migrate it once by hand: `alembic upgrade head`
-    # (see docs/DEPLOYMENT.md → "Database options", Option B/C).
+    # (see docs/DEPLOYMENT.md → "Database options", Option B/C). Idempotent —
+    # safe to run again against an already-migrated database.
     profiles: ["infra"]
     env_file: [.env]
     environment:

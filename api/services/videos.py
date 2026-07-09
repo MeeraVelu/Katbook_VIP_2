@@ -80,20 +80,23 @@ def register_video(session: Session, source_path: str, force: bool = False) -> d
             "message": "Video already processed.",
         }
 
+    filename = os.path.basename(source_path)
+
     canonical = _find_canonical(session, content_hash, vid)
     if canonical:
         # record the exact duplicate as a reference — never reprocessed
         session.execute(
             text("""
-            INSERT INTO videos(video_id, source_path, content_hash, file_size_bytes,
-                status, is_duplicate, canonical_video_id, updated_at)
-            VALUES (:vid,:sp,:h,:fs,'done',TRUE,:can, now())
+            INSERT INTO videos(video_id, source_path, video_filename, content_hash,
+                file_size_bytes, status, is_duplicate, canonical_video_id, updated_at)
+            VALUES (:vid,:sp,:vf,:h,:fs,'done',TRUE,:can, now())
             ON CONFLICT (video_id) DO UPDATE SET
                 is_duplicate=TRUE, canonical_video_id=:can, content_hash=:h,
                 status='done', updated_at=now()"""),
             {
                 "vid": str(vid),
                 "sp": source_path,
+                "vf": filename,
                 "h": content_hash,
                 "fs": size,
                 "can": str(canonical),
@@ -115,16 +118,16 @@ def register_video(session: Session, source_path: str, force: bool = False) -> d
     # fresh (or forced) work: upsert the video as queued, create a job, enqueue
     session.execute(
         text("""
-        INSERT INTO videos(video_id, source_path, content_hash, file_size_bytes,
-            status, is_duplicate, updated_at)
-        VALUES (:vid,:sp,:h,:fs,'queued',FALSE, now())
+        INSERT INTO videos(video_id, source_path, video_filename, content_hash,
+            file_size_bytes, status, is_duplicate, updated_at)
+        VALUES (:vid,:sp,:vf,:h,:fs,'queued',FALSE, now())
         ON CONFLICT (video_id) DO UPDATE SET
-            source_path=:sp, content_hash=:h, file_size_bytes=:fs,
+            source_path=:sp, video_filename=:vf, content_hash=:h, file_size_bytes=:fs,
             status='queued', is_duplicate=FALSE, canonical_video_id=NULL,
             error_message=NULL, updated_at=now()"""),
-        {"vid": str(vid), "sp": source_path, "h": content_hash, "fs": size},
+        {"vid": str(vid), "sp": source_path, "vf": filename, "h": content_hash, "fs": size},
     )
-    job = jobs_svc.create_job(session, vid)
+    job = jobs_svc.create_job(session, vid, video_filename=filename)
     session.flush()
     enqueue_video(job.job_id, vid, source_path)
     return {
@@ -177,15 +180,16 @@ def register_batch(
                 }
             )
             continue
+        filename = os.path.basename(p)
         session.execute(
             text("""
-            INSERT INTO videos(video_id, source_path, status, is_duplicate, updated_at)
-            VALUES (:vid,:sp,'queued',FALSE, now())
+            INSERT INTO videos(video_id, source_path, video_filename, status, is_duplicate, updated_at)
+            VALUES (:vid,:sp,:vf,'queued',FALSE, now())
             ON CONFLICT (video_id) DO UPDATE SET
-                source_path=:sp, status='queued', error_message=NULL, updated_at=now()"""),
-            {"vid": str(vid), "sp": p},
+                source_path=:sp, video_filename=:vf, status='queued', error_message=NULL, updated_at=now()"""),
+            {"vid": str(vid), "sp": p, "vf": filename},
         )
-        job = jobs_svc.create_job(session, vid)
+        job = jobs_svc.create_job(session, vid, video_filename=filename)
         session.flush()
         enqueue_video(job.job_id, vid, p)
         enq += 1

@@ -22,6 +22,7 @@ PRESERVED behavior:
 from __future__ import annotations
 
 import json
+import os
 
 from .utils import log
 
@@ -36,6 +37,15 @@ _CORE_LLM_FIELDS = {
     "subtopics",
     "summary",
     "confidence",
+    # duplicated-elsewhere fields: each has its own dedicated column (or is
+    # folded into `speakers`), so they're excluded from `extra` too — see
+    # _seg_columns below.
+    "est_min",
+    "objects",
+    "language",
+    "bloom_level",
+    "speaker_role",
+    "learning_objectives",
 }
 
 
@@ -111,15 +121,16 @@ def store_duplicate(
     with engine.begin() as cx:
         cx.execute(
             sql("""
-            INSERT INTO videos(video_id, source_path, content_hash, file_size_bytes,
-                status, is_duplicate, canonical_video_id, updated_at)
-            VALUES (:vid,:sp,:h,:fs,'done',TRUE,:can, now())
+            INSERT INTO videos(video_id, source_path, video_filename, content_hash,
+                file_size_bytes, status, is_duplicate, canonical_video_id, updated_at)
+            VALUES (:vid,:sp,:vf,:h,:fs,'done',TRUE,:can, now())
             ON CONFLICT (video_id) DO UPDATE SET
                 is_duplicate=TRUE, canonical_video_id=:can, content_hash=:h,
                 status='done', updated_at=now()"""),
             {
                 "vid": video_id,
                 "sp": source_path,
+                "vf": os.path.basename(source_path) if source_path else None,
                 "h": content_hash,
                 "fs": file_size,
                 "can": canonical_id,
@@ -131,16 +142,32 @@ def store_duplicate(
 def _seg_columns(seg: dict, emb_list) -> dict:
     """Project one in-memory segment into the structured row for insertion."""
     llm = seg.get("llm", {}) or {}
+    # `extra` holds ONLY fields with no dedicated column: the full per-frame
+    # scenes list (dominant_scene is just the single most-common value, not a
+    # replacement), captions, has_visual_content, and any future experimental
+    # LLM field. Fields with a dedicated column (objects, speakers/speaker_role,
+    # language, bloom_level, learning_objectives, est_min, ...) are excluded via
+    # _CORE_LLM_FIELDS and written ONLY to their own column, never duplicated here.
     extra = {k: v for k, v in llm.items() if k not in _CORE_LLM_FIELDS}
-    # visual evidence lives in extra so the silent-path record + export stay lossless
     extra.update(
         {
             "scenes": seg.get("scenes", []),
-            "objects": seg.get("objects", []),
             "captions": seg.get("captions", []),
+            "has_visual_content": llm.get("has_visual_content"),
         }
     )
+    objects = seg.get("objects", []) or []
     conf = llm.get("confidence")
+    conf_val = float(conf) if isinstance(conf, (int, float)) else None
+
+    speaker_role = llm.get("speaker_role")
+    speakers = [{"role": speaker_role, "language": llm.get("language")}] if speaker_role else []
+
+    # enrichment: populated opportunistically — only if the LLM/pipeline
+    # actually produced a value; the current prompt doesn't ask for
+    # prerequisites, so it stays [] until a future prompt change adds it.
+    review_flag = bool(llm.get("_recovered")) or (conf_val is not None and conf_val < 0.5)
+
     return {
         "topic": llm.get("topic"),
         "subject": llm.get("subject"),
@@ -150,11 +177,21 @@ def _seg_columns(seg: dict, emb_list) -> dict:
         "tags": list(llm.get("tags", []) or []),
         "subtopics": list(llm.get("subtopics", []) or []),
         "summary": llm.get("summary"),
-        "confidence": float(conf) if isinstance(conf, (int, float)) else None,
+        "confidence": conf_val,
         "transcript_text": seg.get("text", "") or "",
         "ocr": seg.get("ocr", "") or "",
         "extra": json.dumps(extra, default=str),
         "embedding": "[" + ",".join(f"{x:.6f}" for x in emb_list) + "]",
+        "objects": json.dumps(objects, default=str),
+        "speakers": json.dumps(speakers, default=str),
+        "dominant_scene": seg.get("dominant_scene"),
+        "review_flag": review_flag,
+        "bloom_level": llm.get("bloom_level"),
+        "prerequisites": json.dumps(llm.get("prerequisites") or [], default=str),
+        "learning_objectives": json.dumps(llm.get("learning_objectives") or [], default=str),
+        "est_min": llm.get("est_min"),
+        "aku_id": llm.get("aku_id"),
+        "knowledge_type": llm.get("knowledge_type"),
     }
 
 
@@ -165,27 +202,29 @@ def store(payload: dict, seg_emb, engine) -> None:
     with engine.begin() as cx:
         cx.execute(
             sql("""
-            INSERT INTO videos(video_id, source_path, content_hash, file_size_bytes,
-                duration_sec, language, has_speech, tagging_path, status,
-                is_duplicate, canonical_video_id, error_message,
+            INSERT INTO videos(video_id, source_path, video_filename, content_hash,
+                file_size_bytes, duration_sec, language, has_speech, tagging_path,
+                profile, status, is_duplicate, canonical_video_id, error_message,
                 runtime, stage_timings, updated_at)
-            VALUES (:vid,:sp,:ch,:fs,:dur,:lang,:hs,:tp,'done',
+            VALUES (:vid,:sp,:vf,:ch,:fs,:dur,:lang,:hs,:tp,:pf,'done',
                 FALSE,NULL,NULL, CAST(:rt AS jsonb), CAST(:st AS jsonb), now())
             ON CONFLICT (video_id) DO UPDATE SET
-                source_path=:sp, content_hash=:ch, file_size_bytes=:fs,
+                source_path=:sp, video_filename=:vf, content_hash=:ch, file_size_bytes=:fs,
                 duration_sec=:dur, language=:lang, has_speech=:hs, tagging_path=:tp,
-                status='done', is_duplicate=FALSE, canonical_video_id=NULL,
+                profile=:pf, status='done', is_duplicate=FALSE, canonical_video_id=NULL,
                 error_message=NULL, runtime=CAST(:rt AS jsonb),
                 stage_timings=CAST(:st AS jsonb), updated_at=now()"""),
             {
                 "vid": payload["video_id"],
                 "sp": payload["source_path"],
+                "vf": os.path.basename(payload["source_path"]) if payload.get("source_path") else None,
                 "ch": payload.get("content_hash"),
                 "fs": payload.get("file_size_bytes"),
                 "dur": float(payload.get("duration") or 0),
                 "lang": payload.get("language"),
                 "hs": payload.get("has_speech"),
                 "tp": payload.get("tagging_path"),
+                "pf": payload.get("runtime", {}).get("profile"),
                 "rt": json.dumps(payload.get("runtime", {}), default=str),
                 "st": json.dumps(payload.get("stage_timings", {}), default=str),
             },
@@ -209,11 +248,17 @@ def store(payload: dict, seg_emb, engine) -> None:
                 INSERT INTO segments(video_id, seg_index, start_sec, end_sec,
                     topic, subject, grade_level, difficulty, content_type,
                     tags, subtopics, summary, confidence, transcript_text, ocr,
-                    extra, embedding)
+                    extra, embedding, objects, speakers, dominant_scene, review_flag,
+                    bloom_level, prerequisites, learning_objectives, est_min,
+                    aku_id, knowledge_type)
                 VALUES (:v,:i,:a,:b,:topic,:subject,:grade_level,:difficulty,
                     :content_type,:tags,:subtopics,:summary,:confidence,
                     :transcript_text,:ocr, CAST(:extra AS jsonb),
-                    CAST(:embedding AS vector))"""),
+                    CAST(:embedding AS vector), CAST(:objects AS jsonb),
+                    CAST(:speakers AS jsonb), :dominant_scene, :review_flag,
+                    :bloom_level, CAST(:prerequisites AS jsonb),
+                    CAST(:learning_objectives AS jsonb), :est_min,
+                    :aku_id, :knowledge_type)"""),
                 {
                     "v": payload["video_id"],
                     "i": i,

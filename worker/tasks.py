@@ -124,7 +124,7 @@ def process_video(self, job_id: str, video_id: str, source_path: str) -> dict:
     device = _device()
 
     with session_scope() as s:
-        jobs_svc.mark_started(s, uuid.UUID(job_id))
+        jobs_svc.mark_started(s, uuid.UUID(job_id), profile=cfg.get("PROFILE"))
 
     try:
         embedder, nlp = _shared_models(cfg, device)

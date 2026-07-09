@@ -59,7 +59,7 @@ def _segment_out(s: Segment) -> SegmentOut:
         transcript_text=s.transcript_text,
         ocr=s.ocr,
         scenes=extra.get("scenes", []) or [],
-        objects=extra.get("objects", []) or [],
+        objects=list(s.objects or []),
         captions=extra.get("captions", []) or [],
     )
 

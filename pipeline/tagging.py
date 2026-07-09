@@ -37,7 +37,9 @@ _SCHEMA = (
     '"difficulty": "beginner|intermediate|advanced|expert", '
     '"grade_level": str, "subject": str, "summary": str, "tags": [str], '
     '"speaker_role": "teacher|student|narrator|none", "language": str, '
-    '"has_visual_content": bool, "confidence": float}'
+    '"has_visual_content": bool, "confidence": float, '
+    '"bloom_level": "remember|understand|apply|analyze|evaluate|create", '
+    '"learning_objectives": [str], "est_min": float}'
 )
 
 _DOMAIN = (
@@ -50,7 +52,13 @@ _DOMAIN = (
     "fits the content (an alphabet / rhyme / simple animation for young children is "
     "Kindergarten or Grade 1-2). The 'topic' must be the SPECIFIC lesson focus "
     "(e.g. 'Balancing Chemical Equations', 'Tamil vowel letters'), never just the "
-    "bare subject name like 'Chemistry' or 'Languages'."
+    "bare subject name like 'Chemistry' or 'Languages'. 'bloom_level' = the single "
+    "dominant cognitive level (Bloom's taxonomy) this segment targets — 'remember' "
+    "(recall facts) through 'create' (original synthesis); most lecture segments are "
+    "'remember' or 'understand'. 'learning_objectives' = 1-3 short ENGLISH statements "
+    "of the form 'Students will be able to ...', specific to THIS segment's content. "
+    "'est_min' = realistic minutes for a student to watch and absorb this segment "
+    "(usually close to its actual duration; higher for dense/complex content)."
 )
 
 
@@ -129,6 +137,9 @@ def _parse_llm(raw: str) -> dict:
         "subtopics": grab_list("subtopics"),
         "confidence": grab_num("confidence"),
         "has_visual_content": grab_bool("has_visual_content"),
+        "bloom_level": grab_str("bloom_level"),
+        "learning_objectives": grab_list("learning_objectives"),
+        "est_min": grab_num("est_min"),
         "_recovered": True,  # flag: this came from truncation recovery, not strict parse
     }
     out = {k: v for k, v in out.items() if v is not None}

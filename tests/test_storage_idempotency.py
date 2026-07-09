@@ -2,8 +2,8 @@
 Storage idempotency + exact-duplicate behavior against a REAL Postgres.
 
 Integration test: skipped unless ``KVIP_TEST_DATABASE_URL`` points at a disposable
-pgvector database (e.g. the compose `postgres` service). It runs the Alembic
-migration, then verifies:
+pgvector database (e.g. the compose `postgres` service). It wipes the schema and
+reapplies the Alembic migrations fresh, then verifies:
   * re-storing the same video UPSERTs (one video row, segments replaced not doubled);
   * a byte-identical file is recorded as a duplicate reference to its canonical.
 
@@ -42,12 +42,20 @@ from pipeline.storage import (  # noqa: E402
 def engine():
     os.environ["DATABASE_URL"] = TEST_URL
     os.environ.setdefault("KVIP_EMBED_DIM", "1024")
+    import psycopg
     from alembic import command
     from alembic.config import Config
 
-    cfg = Config("alembic.ini")
-    command.downgrade(cfg, "base")
+    scheme, rest = TEST_URL.split("://", 1)
+    dsn = f"{scheme.split('+', 1)[0]}://{rest}"
+    with psycopg.connect(dsn, connect_timeout=15) as cx:
+        cx.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
+        cx.commit()
+
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cfg = Config(os.path.join(repo_root, "alembic.ini"))
     command.upgrade(cfg, "head")
+
     eng = make_engine(normalize_db_url(TEST_URL))
     yield eng
     eng.dispose()

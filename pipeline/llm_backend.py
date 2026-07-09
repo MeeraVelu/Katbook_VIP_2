@@ -141,6 +141,9 @@ class StubBackend:
                 "language": "en",
                 "has_visual_content": True,
                 "confidence": 0.5 if is_silent else 0.7,
+                "bloom_level": "understand",
+                "learning_objectives": [f"Students will be able to describe {topic}."],
+                "est_min": 2.0,
             }
         )
 

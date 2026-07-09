@@ -4,7 +4,8 @@ PostgreSQL 16 + [pgvector](https://github.com/pgvector/pgvector) is the single
 datastore: relational (`videos` → `segments` → `jobs`), semantic search (pgvector
 cosine), keyword search (tsvector FTS), and exact-duplicate lookups all live in
 **one** engine. Image: `pgvector/pgvector:pg16`. Schema is owned by **Alembic**
-(`database/versions/0001_initial_schema.py`) — no runtime `CREATE TABLE`.
+(`database/versions/` — `0001_initial_schema.py`, `0002_enrich_schema.py`,
+`0003_cleanup_segments.py`) — no runtime `CREATE TABLE`.
 
 ## Why Postgres + pgvector (not a dedicated vector DB)
 
@@ -33,12 +34,14 @@ erDiagram
     videos {
         uuid video_id PK
         text source_path
+        text video_filename "basename(source_path), denormalized"
         text content_hash "sha256 (dedup)"
         bigint file_size_bytes
         double duration_sec
         text language
         boolean has_speech
         text tagging_path "voice|silent"
+        text profile "KVIP_PROFILE this video ran under"
         text status "queued|processing|done|failed|soft_deleted"
         boolean is_duplicate
         uuid canonical_video_id FK
@@ -49,34 +52,50 @@ erDiagram
         timestamptz updated_at
     }
     segments {
-        bigint id PK
+        uuid segment_id PK
         uuid video_id FK
         int seg_index
         double start_sec
         double end_sec
+        real est_min "opportunistic"
         text topic
         text subject
         text grade_level
         text difficulty
         text content_type
+        text bloom_level "opportunistic"
+        text knowledge_type "reserved"
+        jsonb learning_objectives "opportunistic"
+        jsonb prerequisites "reserved (no curriculum context)"
+        text aku_id "reserved"
         text_array tags
         text_array subtopics
         text summary
         double confidence
+        boolean review_flag "confidence<0.5 or LLM-recovery path"
         text transcript_text
         text ocr
-        jsonb extra "scenes/objects/captions + llm extras"
+        text dominant_scene "most frequent per-frame scene label"
+        jsonb speakers "[{role, language}], opportunistic"
+        jsonb objects "detected objects, sole source of truth"
+        jsonb extra "scenes/captions/has_visual_content ONLY (no dedicated-column dupes)"
         vector embedding "1024-d (BGE-M3)"
-        tsvector fts "generated"
+        tsvector fts "generated, incl. ocr"
+        timestamptz created_at
     }
     jobs {
         uuid job_id PK
         uuid video_id FK
-        text state "queued|processing|done|failed"
+        text video_filename "denormalized"
+        text state "queued|processing|done|failed|dead_letter"
         text current_stage
+        text error_stage "best-effort: stage at time of failure"
         int attempts
         jsonb stage_timings
         text error
+        int progress_pct "0-100"
+        text profile "KVIP_PROFILE this job ran under"
+        real health_score "reserved"
         timestamptz enqueued_at
         timestamptz started_at
         timestamptz finished_at

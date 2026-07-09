@@ -1,0 +1,7 @@
+# Force LF regardless of any local core.autocrlf setting — a shell script
+# checked out with CRLF fails "bash -euo pipefail" with a cryptic error
+# (hit exactly this with docker/entrypoint-worker.sh on a Windows checkout
+# with core.autocrlf=true; the committed file was always correct LF, only
+# the local checkout was corrupted).
+*.sh text eol=lf
+docker/entrypoint*.sh text eol=lf

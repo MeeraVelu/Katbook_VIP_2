@@ -39,7 +39,9 @@ _SCHEMA = (
     '"speaker_role": "teacher|student|narrator|none", "language": str, '
     '"has_visual_content": bool, "confidence": float, '
     '"bloom_level": "remember|understand|apply|analyze|evaluate|create", '
-    '"learning_objectives": [str], "est_min": float}'
+    '"learning_objectives": [str], "est_min": float, '
+    '"knowledge_type": "conceptual|procedural|factual|metacognitive", '
+    '"prerequisites": [str]}'
 )
 
 _DOMAIN = (
@@ -58,7 +60,15 @@ _DOMAIN = (
     "'remember' or 'understand'. 'learning_objectives' = 1-3 short ENGLISH statements "
     "of the form 'Students will be able to ...', specific to THIS segment's content. "
     "'est_min' = realistic minutes for a student to watch and absorb this segment "
-    "(usually close to its actual duration; higher for dense/complex content)."
+    "(usually close to its actual duration; higher for dense/complex content). "
+    "'knowledge_type' = classify what KIND of knowledge this segment teaches: "
+    "'conceptual' explains ideas/theories, 'what is X' (e.g. 'what is photosynthesis'); "
+    "'procedural' teaches steps or methods, 'how to do X' (e.g. 'how to balance an "
+    "equation'); 'factual' presents specific facts, formulas, or data (e.g. 'the speed "
+    "of light is 3x10^8 m/s'); 'metacognitive' teaches learning strategies, 'how to "
+    "learn X' (e.g. study techniques). 'prerequisites' = list 1-3 short pieces of "
+    "prior knowledge a student needs BEFORE watching this segment (e.g. "
+    "['basic algebra', 'understanding of atoms']); return [] if none needed."
 )
 
 
@@ -140,6 +150,8 @@ def _parse_llm(raw: str) -> dict:
         "bloom_level": grab_str("bloom_level"),
         "learning_objectives": grab_list("learning_objectives"),
         "est_min": grab_num("est_min"),
+        "knowledge_type": grab_str("knowledge_type"),
+        "prerequisites": grab_list("prerequisites"),
         "_recovered": True,  # flag: this came from truncation recovery, not strict parse
     }
     out = {k: v for k, v in out.items() if v is not None}

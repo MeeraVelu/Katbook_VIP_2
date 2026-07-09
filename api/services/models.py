@@ -118,6 +118,10 @@ class Segment(Base):
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # kept in sync by the segments_set_updated_at trigger (see database/schema.sql)
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     video: Mapped[Video] = relationship(back_populates="segments")
 

@@ -6,8 +6,8 @@
 --
 --   Production migrations: alembic upgrade head
 --     (database/versions/0001_initial_schema.py + 0002_enrich_schema.py +
---      0003_cleanup_segments.py — all idempotent, safe against a brand-new
---      database or an already-migrated one)
+--      0003_cleanup_segments.py + 0004_add_updated_at_and_triggers.py — all
+--      idempotent, safe against a brand-new database or an already-migrated one)
 --
 --   Fresh dev/test bootstrap only (skips migration history entirely):
 --     psql "$DATABASE_URL" -f database/schema.sql
@@ -134,7 +134,8 @@ CREATE TABLE IF NOT EXISTS segments (
             coalesce(topic,'') || ' ' ||
             coalesce(ocr,''))
     ) STORED,
-    created_at                TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at                TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 COMMENT ON TABLE segments IS
     'One row per tagged time-range within a video. embedding is the pgvector '
@@ -146,10 +147,10 @@ COMMENT ON COLUMN segments.embedding IS 'pgvector embedding of the segment. Writ
 COMMENT ON COLUMN segments.review_flag IS 'Auto-set TRUE when confidence < 0.5 or the LLM output needed truncation recovery — flags the segment for manual QA.';
 COMMENT ON COLUMN segments.speakers IS 'JSON list of {role, language} derived from the LLM''s speaker_role/language fields.';
 COMMENT ON COLUMN segments.dominant_scene IS 'Most frequent per-frame scene label across the segment''s frames.';
-COMMENT ON COLUMN segments.aku_id IS 'Reserved: future atomic-knowledge-unit id. Not populated by the current pipeline.';
-COMMENT ON COLUMN segments.knowledge_type IS 'Reserved: future taxonomy tag. Not populated by the current pipeline.';
+COMMENT ON COLUMN segments.aku_id IS 'Reserved: future atomic-knowledge-unit id, needs a separate curriculum-mapping design. Deliberately NEVER populated by the pipeline or the LLM.';
+COMMENT ON COLUMN segments.knowledge_type IS 'Populated by the LLM: conceptual | procedural | factual | metacognitive.';
 COMMENT ON COLUMN segments.bloom_level IS 'Populated only if the LLM/prompt returns it.';
-COMMENT ON COLUMN segments.prerequisites IS 'Reserved: the LLM only sees one segment at a time with no curriculum context, so it cannot produce trustworthy prerequisite topics yet. Not populated by the current pipeline.';
+COMMENT ON COLUMN segments.prerequisites IS 'Populated by the LLM: 1-3 short prior-knowledge strings, or [] if none needed. The LLM only sees one segment at a time with no curriculum context, so these are generic, not references to real prior lessons in your catalog.';
 COMMENT ON COLUMN segments.learning_objectives IS 'Populated only if the LLM/prompt returns it.';
 COMMENT ON COLUMN segments.est_min IS 'Populated only if the LLM/prompt returns it.';
 
@@ -161,3 +162,34 @@ CREATE INDEX IF NOT EXISTS segments_grade_idx       ON segments(grade_level);
 -- query-time recall with `SET hnsw.ef_search = N;`.
 CREATE INDEX IF NOT EXISTS segments_embedding_hnsw ON segments
     USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+
+-- ============================================================================
+-- updated_at auto-maintenance — one shared function, one trigger per table.
+-- Belt-and-suspenders: videos/jobs.updated_at is also set explicitly by
+-- application code on every write, so the trigger is redundant there but
+-- harmless (same now() value within the transaction); segments never had
+-- application-level UPDATE support, so the trigger is what actually keeps
+-- it correct if a future write path modifies a segment in place.
+-- ============================================================================
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS segments_set_updated_at ON segments;
+CREATE TRIGGER segments_set_updated_at
+    BEFORE UPDATE ON segments
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS videos_set_updated_at ON videos;
+CREATE TRIGGER videos_set_updated_at
+    BEFORE UPDATE ON videos
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS jobs_set_updated_at ON jobs;
+CREATE TRIGGER jobs_set_updated_at
+    BEFORE UPDATE ON jobs
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();

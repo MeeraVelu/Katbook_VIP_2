@@ -46,6 +46,8 @@ _CORE_LLM_FIELDS = {
     "bloom_level",
     "speaker_role",
     "learning_objectives",
+    "knowledge_type",
+    "prerequisites",
 }
 
 
@@ -163,9 +165,8 @@ def _seg_columns(seg: dict, emb_list) -> dict:
     speaker_role = llm.get("speaker_role")
     speakers = [{"role": speaker_role, "language": llm.get("language")}] if speaker_role else []
 
-    # enrichment: populated opportunistically — only if the LLM/pipeline
-    # actually produced a value; the current prompt doesn't ask for
-    # prerequisites, so it stays [] until a future prompt change adds it.
+    # aku_id is deliberately NEVER requested from the LLM (needs a separate
+    # curriculum-mapping design) — llm.get("aku_id") below always returns None.
     review_flag = bool(llm.get("_recovered")) or (conf_val is not None and conf_val < 0.5)
 
     return {

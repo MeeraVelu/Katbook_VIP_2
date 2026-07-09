@@ -144,6 +144,8 @@ class StubBackend:
                 "bloom_level": "understand",
                 "learning_objectives": [f"Students will be able to describe {topic}."],
                 "est_min": 2.0,
+                "knowledge_type": "conceptual",
+                "prerequisites": [],
             }
         )
 

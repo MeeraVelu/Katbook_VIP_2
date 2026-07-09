@@ -276,6 +276,16 @@ def get_video(session: Session, video_id: uuid.UUID) -> Video | None:
     return session.get(Video, video_id)
 
 
+def list_segments(session: Session, video_id: uuid.UUID) -> list[Segment]:
+    return list(
+        session.execute(
+            select(Segment).where(Segment.video_id == video_id).order_by(Segment.seg_index)
+        )
+        .scalars()
+        .all()
+    )
+
+
 def list_facets(session: Session) -> dict:
     """Distinct subject/grade/language values already present in the (non-deleted)
     library — powers the Library page's filter autocomplete."""

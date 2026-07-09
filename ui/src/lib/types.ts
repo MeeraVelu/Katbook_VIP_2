@@ -133,6 +133,22 @@ export interface JobStatus {
   elapsed_sec: number | null;
 }
 
+export interface ActiveJob extends JobStatus {
+  video_filename: string | null;
+}
+
+export interface JobHistoryItem {
+  job_id: string;
+  video_id: string;
+  video_filename: string | null;
+  status: "done" | "failed";
+  subject: string | null;
+  segment_count: number;
+  processing_duration_sec: number | null;
+  completed_at: string | null;
+  error: string | null;
+}
+
 export interface SearchHit {
   video_id: string;
   seg_index: number;

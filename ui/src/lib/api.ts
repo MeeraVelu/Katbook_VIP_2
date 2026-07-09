@@ -2,10 +2,12 @@
 // /ready to the API service UNCHANGED. Injects the X-API-Key header from local
 // storage and unwraps the backend error envelope into a typed ApiError.
 import type {
+  ActiveJob,
   BatchRequest,
   BatchResponse,
   FacetsResponse,
   HealthResponse,
+  JobHistoryItem,
   JobStatus,
   Page,
   ReadyResponse,
@@ -123,6 +125,9 @@ export const api = {
 
   // jobs
   getJob: (id: string) => request<JobStatus>(`/api/v1/jobs/${id}`),
+  activeJobs: () => request<ActiveJob[]>("/api/v1/jobs/active"),
+  jobHistory: (page: number, pageSize: number, status?: "done" | "failed") =>
+    request<Page<JobHistoryItem>>(`/api/v1/jobs/history${qs({ page, page_size: pageSize, status })}`),
 
   // search
   search: (q: string, mode: SearchMode, limit: number) =>

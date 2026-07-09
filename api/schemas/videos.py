@@ -80,6 +80,41 @@ class SegmentOut(BaseModel):
     captions: list[str] = []
 
 
+class SegmentDetail(BaseModel):
+    """Every column of one `segments` row — powers `GET /videos/{video_id}/segments`."""
+
+    segment_id: uuid.UUID
+    video_id: uuid.UUID
+    seg_index: int
+    start_sec: float
+    end_sec: float
+    est_min: float | None = None
+    topic: str | None = None
+    subject: str | None = None
+    grade_level: str | None = None
+    difficulty: str | None = None
+    content_type: str | None = None
+    bloom_level: str | None = None
+    knowledge_type: str | None = None
+    learning_objectives: list = []
+    prerequisites: list = []
+    aku_id: str | None = None
+    tags: list[str] = []
+    subtopics: list[str] = []
+    summary: str | None = None
+    confidence: float | None = None
+    review_flag: bool = False
+    transcript_text: str | None = None
+    ocr: str | None = None
+    dominant_scene: str | None = None
+    speakers: list = []
+    objects: list = []
+    scenes: list[str] = []
+    captions: list[str] = []
+    has_visual_content: bool | None = None
+    created_at: dt.datetime | None = None
+
+
 class VideoSummary(BaseModel):
     video_id: uuid.UUID
     source_path: str

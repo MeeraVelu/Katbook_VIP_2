@@ -24,6 +24,7 @@ from api.schemas.videos import (
     FacetsResponse,
     RegisterVideoRequest,
     RegisterVideoResponse,
+    SegmentDetail,
     SegmentOut,
     SoftDeleteResponse,
     VideoDetail,
@@ -61,6 +62,42 @@ def _segment_out(s: Segment) -> SegmentOut:
         scenes=extra.get("scenes", []) or [],
         objects=list(s.objects or []),
         captions=extra.get("captions", []) or [],
+    )
+
+
+def _segment_detail(s: Segment) -> SegmentDetail:
+    extra = s.extra or {}
+    return SegmentDetail(
+        segment_id=s.segment_id,
+        video_id=s.video_id,
+        seg_index=s.seg_index,
+        start_sec=s.start_sec,
+        end_sec=s.end_sec,
+        est_min=s.est_min,
+        topic=s.topic,
+        subject=s.subject,
+        grade_level=s.grade_level,
+        difficulty=s.difficulty,
+        content_type=s.content_type,
+        bloom_level=s.bloom_level,
+        knowledge_type=s.knowledge_type,
+        learning_objectives=list(s.learning_objectives or []),
+        prerequisites=list(s.prerequisites or []),
+        aku_id=s.aku_id,
+        tags=list(s.tags or []),
+        subtopics=list(s.subtopics or []),
+        summary=s.summary,
+        confidence=s.confidence,
+        review_flag=s.review_flag,
+        transcript_text=s.transcript_text,
+        ocr=s.ocr,
+        dominant_scene=s.dominant_scene,
+        speakers=list(s.speakers or []),
+        objects=list(s.objects or []),
+        scenes=extra.get("scenes", []) or [],
+        captions=extra.get("captions", []) or [],
+        has_visual_content=extra.get("has_visual_content"),
+        created_at=s.created_at,
     )
 
 
@@ -192,6 +229,15 @@ def get_video(video_id: uuid.UUID, db: Session = Depends(db_session)) -> VideoDe
         rollup=_rollup(segs),
         segments=segs,
     )
+
+
+@router.get("/{video_id}/segments", response_model=list[SegmentDetail])
+def get_video_segments(video_id: uuid.UUID, db: Session = Depends(db_session)) -> list[SegmentDetail]:
+    """Every column of every `segments` row for one video — full-fidelity, unlike
+    the trimmed `segments` list inside `GET /{video_id}`."""
+    if not svc.get_video(db, video_id):
+        raise svc.VideoError(f"No video {video_id}", code="not_found")
+    return [_segment_detail(s) for s in svc.list_segments(db, video_id)]
 
 
 @router.delete("/{video_id}", response_model=SoftDeleteResponse)

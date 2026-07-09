@@ -70,6 +70,24 @@ export function useJob(id: string | undefined) {
   });
 }
 
+// The job(s) currently processing — the Jobs page's "Processing" tab.
+// Refetches every 2.5s so live stage/progress updates without a manual reload.
+export function useActiveJobs() {
+  return useQuery({
+    queryKey: ["jobs", "active"],
+    queryFn: api.activeJobs,
+    refetchInterval: 2500,
+  });
+}
+
+export function useJobHistory(page: number, pageSize: number, status?: "done" | "failed") {
+  return useQuery({
+    queryKey: ["jobs", "history", page, pageSize, status],
+    queryFn: () => api.jobHistory(page, pageSize, status),
+    placeholderData: (prev) => prev,
+  });
+}
+
 export function useSearch(q: string, mode: SearchMode, limit: number, enabled: boolean) {
   return useQuery({
     queryKey: ["search", q, mode, limit],

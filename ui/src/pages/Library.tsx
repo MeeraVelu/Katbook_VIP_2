@@ -230,6 +230,10 @@ function FInput({
   // intrinsic size cue and was stretching to fill the row, forcing every filter
   // onto its own line instead of sitting side by side.
   const wrapRef = useRef<HTMLDivElement>(null);
+  // The dropdown is portaled to document.body, so it is NOT a DOM child of
+  // wrapRef — the click-outside check must treat a click inside it as "inside"
+  // too, otherwise selecting a suggestion closes the popover before onClick fires.
+  const dropRef = useRef<HTMLDivElement>(null);
 
   function openDropdown() {
     const r = wrapRef.current?.getBoundingClientRect();
@@ -240,7 +244,9 @@ function FInput({
   useEffect(() => {
     if (!open) return;
     function onDocMouseDown(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (wrapRef.current?.contains(t) || dropRef.current?.contains(t)) return;
+      setOpen(false);
     }
     // scrolling/resizing invalidates the captured rect — close rather than show a stale popover
     function onScrollOrResize() {
@@ -278,6 +284,7 @@ function FInput({
         rect &&
         createPortal(
           <div
+            ref={dropRef}
             style={{ position: "fixed", top: rect.top, left: rect.left, width: rect.width }}
             className="z-50 overflow-hidden rounded-xl border border-line bg-white py-1 shadow-glow"
           >
@@ -285,9 +292,11 @@ function FInput({
               <button
                 key={o}
                 type="button"
-                // fires before the input's onBlur/document mousedown-close, so the click registers
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
+                // select on mousedown (before the input blurs) and preventDefault so
+                // the input doesn't steal focus mid-click; the dropRef check above
+                // keeps the outside-click handler from closing us first.
+                onMouseDown={(e) => {
+                  e.preventDefault();
                   on(o);
                   setOpen(false);
                 }}

@@ -135,6 +135,11 @@ services:
       # SHARED inbox: the API writes multipart uploads here and the worker reads
       # them from the SAME volume. Must match the worker's /data/inbox mount.
       - video-inbox:/data/inbox
+      # OPTIONAL NAS share, read-only. If NAS_MOUNT_PATH is unset, this falls back
+      # to a harmless local placeholder dir — Docker creates it empty if missing,
+      # so /data/nas/ is just empty (no crash, nothing to enqueue) instead of the
+      # container failing to start. See docs/BULK_IMPORT.md.
+      - ${NAS_MOUNT_PATH:-/tmp/nas-empty}:/data/nas:ro
     logging: *default-logging
 
   ui:
@@ -166,6 +171,7 @@ services:
     volumes:
       - model-cache:/models
       - video-inbox:/data/inbox
+      - ${NAS_MOUNT_PATH:-/tmp/nas-empty}:/data/nas:ro
       - work:/data/work
       - results:/data/results
     deploy: *gpu-reservation

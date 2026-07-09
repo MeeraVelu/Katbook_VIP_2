@@ -25,11 +25,14 @@ class RegisterVideoRequest(BaseModel):
 
 
 class RegisterVideoResponse(BaseModel):
-    job_id: uuid.UUID | None = Field(
-        None, description="Null when the input was an exact duplicate (not enqueued)."
-    )
+    """The 2xx (queued) shape. An already-processed / byte-identical video is
+    NOT a 2xx anymore — it's a 409 (see api.services.videos.VideoError,
+    code="duplicate"), whose body is the standard error envelope with
+    existing_video_id/existing_segment_count/processed_at inside `details`."""
+
+    job_id: uuid.UUID
     video_id: uuid.UUID
-    status: str = Field(..., description="queued | duplicate | exists")
+    status: str = Field(..., description="queued")
     dedup: DedupVerdict
     message: str
 

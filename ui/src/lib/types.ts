@@ -23,10 +23,12 @@ export interface RegisterVideoRequest {
   force?: boolean;
 }
 
+// The 2xx (queued) shape only — an already-processed/duplicate video is a 409
+// now (ApiError with code "duplicate"), not part of this success type.
 export interface RegisterVideoResponse {
-  job_id: string | null;
+  job_id: string;
   video_id: string;
-  status: string; // queued | duplicate | exists
+  status: string; // "queued"
   dedup: DedupVerdict;
   message: string;
 }
@@ -191,6 +193,14 @@ export interface ErrorEnvelope {
   message: string;
   request_id: string | null;
   details: Record<string, unknown> | null;
+}
+
+// The `details` shape of a 409 "duplicate" VideoError (see api/services/videos.py).
+export interface DuplicateDetails {
+  status: "duplicate";
+  existing_video_id: string;
+  existing_segment_count: number;
+  processed_at: string | null;
 }
 
 export interface VideoFilters {

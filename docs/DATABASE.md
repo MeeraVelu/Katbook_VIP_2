@@ -113,6 +113,41 @@ Notes on the design vs the POC:
   ever deduplicated (`is_duplicate` + `canonical_video_id`); same-topic/
   different-content videos are never merged or removed.
 
+## Handling Duplicate Uploads
+
+Three scenarios, driven by `video_id = uuid5(source_path)` (deterministic per
+file path) plus a SHA-256 `content_hash` pre-check, both computed in
+`api/services/videos.py::register_video`:
+
+**A) Fresh upload (not a duplicate)**
+New `source_path` → new `video_id`, and its `content_hash` doesn't match any
+other video. Registered as `status='queued'`, `is_duplicate=FALSE`,
+`canonical_video_id=NULL`, and enqueued for processing normally.
+
+**B) Byte-identical duplicate found**
+A *different* `source_path` (so a different `video_id`) hashes to the exact
+same `content_hash` as an existing, already-processed video. The new row is
+recorded as `is_duplicate=TRUE`, `canonical_video_id=<the original's
+video_id>`, `status='done'` — **no processing runs**, no GPU time spent
+re-tagging content that's byte-for-byte identical. The API returns **409
+Conflict** with the canonical video's id/segment count/timestamp so the
+caller can look at the existing results instead. Passing `force=true`
+bypasses this check entirely and processes the upload independently anyway
+(useful for deliberately re-running the latest models/prompts against
+content you know is unchanged).
+
+**C) Force reprocess of an existing video**
+Same `source_path` → same `video_id`, uploaded again with `force=true`. No
+new video row — the *same* `video_id` is reset to `status='queued'` and a
+new `jobs` row is created. When the run completes, `pipeline/storage.py`'s
+`store()` unconditionally does `DELETE FROM segments WHERE video_id=...`
+before inserting the fresh segments, and `UPDATE`s the `videos` row in
+place — so segment count stays the same but every `segment_id` is a fresh
+UUID, and `videos.updated_at` (and the `segments_set_updated_at` trigger)
+reflect the new run. Without `force=true`, re-registering an already-`done`
+`video_id` short-circuits with the same 409 as scenario B, instead of
+silently no-oping.
+
 ## Indexes
 
 | Index | Column | Purpose |

@@ -53,8 +53,8 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(VideoError)
     async def _video_error(request: Request, exc: VideoError):
-        status = 404 if exc.code == "not_found" else 400
-        return _envelope(request, status, str(exc), code=exc.code)
+        status = 404 if exc.code == "not_found" else 409 if exc.code == "duplicate" else 400
+        return _envelope(request, status, str(exc), code=exc.code, details=exc.details)
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_error(request: Request, exc: StarletteHTTPException):

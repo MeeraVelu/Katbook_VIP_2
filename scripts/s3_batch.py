@@ -96,6 +96,15 @@ class BatchAbort(Exception):
     """Fatal, whole-run error (bad credentials, missing bucket) — stop immediately."""
 
 
+class DuplicateError(RuntimeError):
+    """Raised for a 409 'already processed' response (see api/errors.py,
+    code='duplicate') — NOT a real failure, the caller should skip gracefully."""
+
+    def __init__(self, message: str, details: dict | None):
+        super().__init__(message)
+        self.details = details or {}
+
+
 # --------------------------------------------------------------------------- #
 # API client — stdlib urllib only (keeps the tool's only new dep = boto3)
 # --------------------------------------------------------------------------- #
@@ -129,6 +138,16 @@ class ApiClient:
         env = (body or {}).get("error") or {}
         return env.get("message") or body.get("detail") or f"HTTP {status}"
 
+    @classmethod
+    def _raise_for_status(cls, status: int, body: dict) -> None:
+        if status < 400:
+            return
+        env = (body or {}).get("error") or {}
+        message = cls._err_message(status, body)
+        if status == 409 and env.get("code") == "duplicate":
+            raise DuplicateError(message, env.get("details"))
+        raise RuntimeError(message)
+
     def register_path(self, source_path: str, force: bool) -> dict:
         """POST /api/v1/videos — register a server-visible path (JSON, no upload)."""
         data = json.dumps({"source_path": source_path, "force": force}).encode()
@@ -139,8 +158,7 @@ class ApiClient:
             method="POST",
         )
         status, body = self._send(req)
-        if status >= 400:
-            raise RuntimeError(self._err_message(status, body))
+        self._raise_for_status(status, body)
         return body
 
     def upload(self, local_path: str, filename: str, force: bool) -> dict:
@@ -158,8 +176,7 @@ class ApiClient:
             status, resp = self._send(req)
         finally:
             body.close()
-        if status >= 400:
-            raise RuntimeError(self._err_message(status, resp))
+        self._raise_for_status(status, resp)
         return resp
 
     def job(self, job_id: str) -> dict:
@@ -339,7 +356,9 @@ class Failure:
 class Results:
     total: int = 0
     processed: int = 0
-    duplicates: int = 0
+    # covers BOTH "already processed at this same path" and "byte-identical to
+    # another video" — the API now returns the same 409 shape for both (see
+    # DuplicateError), so this tool no longer distinguishes them.
     skipped_existing: int = 0
     failures: list[Failure] = field(default_factory=list)
 
@@ -451,25 +470,23 @@ def process_batch(
                     resp = api.register_path(item.local_path, force)
                 else:
                     resp = api.upload(item.local_path, os.path.basename(item.key), force)
+            except DuplicateError as e:
+                # 409 from the API: already processed (same path) or byte-identical
+                # to another video — not a failure, just nothing to do. Use --force
+                # to reprocess anyway.
+                res.skipped_existing += 1
+                existing = e.details.get("existing_video_id", "?")
+                print(f"{tag} Already processed (video {str(existing)[:8]}) — skipped. ⏭️")
+                _maybe_delete(item.local_path, delete_local)
+                continue
             except Exception as e:  # noqa: BLE001
                 print(f"{tag} Submit FAILED: {str(e)[:160]} ❌")
                 res.fail(item.key, "submit", str(e))
                 _maybe_delete(item.local_path, delete_local)
                 continue
 
-            status = resp.get("status")
             video_id = str(resp.get("video_id") or "")
             job_id = resp.get("job_id")
-
-            if status in ("exists", "duplicate"):
-                if status == "duplicate":
-                    res.duplicates += 1
-                    print(f"{tag} Exact duplicate — not reprocessed. ⏭️")
-                else:
-                    res.skipped_existing += 1
-                    print(f"{tag} Already processed — skipped. ⏭️")
-                _maybe_delete(item.local_path, delete_local)
-                continue
 
             # queued -> wait for the worker to finish
             try:
@@ -655,8 +672,7 @@ def main(argv: list[str] | None = None) -> int:
     print("Summary:")
     print(f"  Total matched:            {res.total + len(skipped_existing_keys)}")
     print(f"  Processed:                {res.processed} ✅")
-    print(f"  Skipped (already in DB):  {res.skipped_existing}")
-    print(f"  Exact duplicates:         {res.duplicates}")
+    print(f"  Skipped (already processed / duplicate): {res.skipped_existing}")
     print(f"  Failed:                   {len(res.failures)} ❌")
     if res.failures:
         print("\nFailures (retry these):")

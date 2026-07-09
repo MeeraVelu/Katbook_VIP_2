@@ -32,9 +32,10 @@ VIDEO_EXTS = ("mp4", "webm", "mov", "mkv", "avi", "m4v")
 class VideoError(Exception):
     """Raised for client-correctable problems (missing file, etc.)."""
 
-    def __init__(self, message: str, code: str = "bad_request"):
+    def __init__(self, message: str, code: str = "bad_request", details: dict | None = None):
         super().__init__(message)
         self.code = code
+        self.details = details
 
 
 def video_id_for(source_path: str) -> uuid.UUID:
@@ -55,6 +56,21 @@ def _find_canonical(session: Session, content_hash: str, exclude_id: uuid.UUID) 
     return row[0] if row else None
 
 
+def _duplicate_details(session: Session, existing_video_id: uuid.UUID) -> dict:
+    """segment_count + processed_at for the video the caller should look at
+    instead of reprocessing — powers the 409 response's `details`."""
+    seg_count = session.execute(
+        select(func.count()).select_from(Segment).where(Segment.video_id == existing_video_id)
+    ).scalar_one()
+    v = session.get(Video, existing_video_id)
+    return {
+        "status": "duplicate",
+        "existing_video_id": str(existing_video_id),
+        "existing_segment_count": int(seg_count),
+        "processed_at": v.updated_at.isoformat() if v and v.updated_at else None,
+    }
+
+
 def register_video(session: Session, source_path: str, force: bool = False) -> dict:
     """Register/enqueue one server-side video. Returns a dict the router maps to
     ``RegisterVideoResponse``."""
@@ -67,22 +83,19 @@ def register_video(session: Session, source_path: str, force: bool = False) -> d
 
     existing = session.get(Video, vid)
     if existing and existing.status == "done" and not existing.is_duplicate and not force:
-        return {
-            "job_id": None,
-            "video_id": vid,
-            "status": "exists",
-            "dedup": {
-                "is_duplicate": False,
-                "canonical_video_id": None,
-                "content_hash": content_hash,
-                "reason": "already processed (use force=true to reprocess)",
-            },
-            "message": "Video already processed.",
-        }
+        raise VideoError(
+            "This video was already processed. Check 'Force reprocess if already "
+            "done' to run it again with the latest models and prompts.",
+            code="duplicate",
+            details=_duplicate_details(session, vid),
+        )
 
     filename = os.path.basename(source_path)
 
-    canonical = _find_canonical(session, content_hash, vid)
+    # force=True means "process THIS upload no matter what" — bypass the
+    # byte-identical dedup optimization too, not just the same-video_id guard
+    # above, so a forced re-upload never silently no-ops.
+    canonical = _find_canonical(session, content_hash, vid) if not force else None
     if canonical:
         # record the exact duplicate as a reference — never reprocessed
         session.execute(
@@ -102,18 +115,17 @@ def register_video(session: Session, source_path: str, force: bool = False) -> d
                 "can": str(canonical),
             },
         )
-        return {
-            "job_id": None,
-            "video_id": vid,
-            "status": "duplicate",
-            "dedup": {
-                "is_duplicate": True,
-                "canonical_video_id": canonical,
-                "content_hash": content_hash,
-                "reason": "byte-identical to an existing video",
-            },
-            "message": f"Exact duplicate of {str(canonical)[:8]}; not reprocessed.",
-        }
+        # commit (not just flush) — get_db()'s exception handler rolls back the
+        # session on ANY raised error, which would otherwise silently undo this
+        # duplicate-reference row right before the 409 reaches the caller.
+        session.commit()
+        raise VideoError(
+            "This video was already processed (matched by SHA-256 hash). Check "
+            "'Force reprocess if already done' to run it again with the latest "
+            "models and prompts.",
+            code="duplicate",
+            details=_duplicate_details(session, canonical),
+        )
 
     # fresh (or forced) work: upsert the video as queued, create a job, enqueue
     session.execute(

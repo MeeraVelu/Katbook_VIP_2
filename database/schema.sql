@@ -39,6 +39,10 @@ CREATE TABLE IF NOT EXISTS videos (
     profile             TEXT,               -- the KVIP_PROFILE this video was processed under
     status              TEXT NOT NULL DEFAULT 'queued',
     is_duplicate        BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Points to the original video when this row is an exact-duplicate
+    -- upload (same SHA-256 content_hash). NULL when this IS the original.
+    -- Used to prevent wasted GPU processing on identical re-uploads —
+    -- see docs/DATABASE.md "Handling Duplicate Uploads".
     canonical_video_id  UUID REFERENCES videos(video_id),
     error_message       TEXT,
     runtime             JSONB NOT NULL DEFAULT '{}'::jsonb,

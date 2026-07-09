@@ -44,12 +44,14 @@ export class ApiError extends Error {
   status: number;
   code: string;
   requestId: string | null;
+  details: Record<string, unknown> | null;
   constructor(status: number, env?: ErrorEnvelope | null, fallback?: string) {
     super(env?.message ?? fallback ?? `HTTP ${status}`);
     this.name = "ApiError";
     this.status = status;
     this.code = env?.code ?? "error";
     this.requestId = env?.request_id ?? null;
+    this.details = env?.details ?? null;
   }
 }
 

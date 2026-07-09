@@ -1,20 +1,27 @@
 import { useState } from "react";
 import type { DragEvent } from "react";
-import { useNavigate } from "react-router-dom";
-import { FileVideo, FolderGit2, HardDriveUpload, Loader2, Upload, UploadCloud } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  AlertTriangle,
+  FileVideo,
+  FolderGit2,
+  HardDriveUpload,
+  Loader2,
+  Upload,
+  UploadCloud,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useBatch, useRegisterVideo, useUploadVideo } from "@/hooks/queries";
-import type { RegisterVideoResponse } from "@/lib/types";
+import type { RegisterVideoResponse, DuplicateDetails } from "@/lib/types";
+import { ApiError } from "@/lib/api";
 import { fmtBytes } from "@/lib/format";
-import { Badge, Button, IconBadge, Panel, cx } from "@/components/primitives";
+import { Button, IconBadge, Panel, cx } from "@/components/primitives";
 
 export function Ingest() {
   const nav = useNavigate();
-  const [note, setNote] = useState<string | null>(null);
 
   function handleRegister(res: RegisterVideoResponse) {
-    if (res.job_id) nav(`/jobs/${res.job_id}`);
-    else setNote(`${res.status}: ${res.message}`);
+    nav(`/jobs/${res.job_id}`);
   }
 
   return (
@@ -28,12 +35,6 @@ export function Ingest() {
           </p>
         </div>
       </div>
-
-      {note && (
-        <Panel className="flex items-center gap-2 border-cyan-200 bg-cyan-50 text-sm">
-          <Badge status={note.split(":")[0]} /> <span className="text-fg">{note}</span>
-        </Panel>
-      )}
 
       <div className="grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-3">
         <RegisterPath onDone={handleRegister} />
@@ -73,6 +74,28 @@ const inputCls =
   "w-full rounded-xl border border-line bg-slate-50 px-3.5 py-2.5 text-sm outline-none transition-colors placeholder:text-faint/70 focus:border-accent/50 focus:bg-white focus:ring-1 focus:ring-accent/30";
 const captionCls = "text-[11px] leading-relaxed text-faint";
 
+// Renders the 409 "duplicate" response as a yellow warning with a link to the
+// existing video; any other error falls back to the plain red message.
+function MutationError({ error }: { error: unknown }) {
+  if (!error) return null;
+  if (error instanceof ApiError && error.code === "duplicate" && error.details) {
+    const d = error.details as unknown as DuplicateDetails;
+    return (
+      <Panel className="flex items-start gap-2.5 border-amber-200 bg-amber-50 p-3 text-xs">
+        <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-600" />
+        <div className="space-y-1">
+          <p className="text-fg">{error.message}</p>
+          <Link to={`/videos/${d.existing_video_id}`} className="font-medium text-accent hover:underline">
+            View existing video ({d.existing_segment_count} segment{d.existing_segment_count === 1 ? "" : "s"}
+            {d.processed_at ? `, processed ${new Date(d.processed_at).toLocaleString()}` : ""})
+          </Link>
+        </div>
+      </Panel>
+    );
+  }
+  return <p className="text-xs text-bad">{(error as Error).message}</p>;
+}
+
 function RegisterPath({ onDone }: { onDone: (r: RegisterVideoResponse) => void }) {
   const [path, setPath] = useState("");
   const [force, setForce] = useState(false);
@@ -88,7 +111,7 @@ function RegisterPath({ onDone }: { onDone: (r: RegisterVideoResponse) => void }
         Force reprocess if already done
       </label>
       <div className="mt-auto space-y-2">
-        {m.isError && <p className="text-xs text-bad">{(m.error as Error).message}</p>}
+        <MutationError error={m.error} />
         <Button
           className="w-full"
           disabled={!path.trim() || m.isPending}
@@ -104,6 +127,7 @@ function RegisterPath({ onDone }: { onDone: (r: RegisterVideoResponse) => void }
 function UploadFile({ onDone }: { onDone: (r: RegisterVideoResponse) => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [force, setForce] = useState(false);
   const m = useUploadVideo();
 
   function onDrop(e: DragEvent<HTMLLabelElement>) {
@@ -156,12 +180,17 @@ function UploadFile({ onDone }: { onDone: (r: RegisterVideoResponse) => void }) 
         </div>
       )}
 
+      <label className="flex items-center gap-2 text-xs text-muted">
+        <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} className="accent-accent" />
+        Force reprocess if already done
+      </label>
+
       <div className="mt-auto space-y-2">
-        {m.isError && <p className="text-xs text-bad">{(m.error as Error).message}</p>}
+        <MutationError error={m.error} />
         <Button
           className="w-full"
           disabled={!file || m.isPending}
-          onClick={() => file && m.mutate({ file, force: false }, { onSuccess: onDone })}
+          onClick={() => file && m.mutate({ file, force }, { onSuccess: onDone })}
         >
           {m.isPending ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
           {m.isPending ? "Uploading…" : "Upload & register"}
